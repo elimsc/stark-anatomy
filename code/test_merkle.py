@@ -65,35 +65,7 @@ def test_spark_merkle():
         path1 = spark_merkle.open(i)
         assert path == path1
         assert Merkle.verify(root, i, path, data_array[i])
-        assert spark_merkle.verify(i, path, data_array[i])
-
-    # opening non-leafs should not work
-    for i in range(n):
-        path = Merkle.open(i, data_array)
-        assert False == Merkle.verify(root, i, path, urandom(51))
-        assert False == spark_merkle.verify(i, path, urandom(51))
-
-    # opening wrong leafs should not work
-    for i in range(n):
-        path = Merkle.open(i, data_array)
-        j = (i + 1 + (int(urandom(1)[0] % (n - 1)))) % n
-        assert False == Merkle.verify(root, i, path, data_array[j])
-        assert False == spark_merkle.verify(i, path, data_array[j])
-
-    # opening leafs with the wrong index should not work
-    for i in range(n):
-        path = Merkle.open(i, data_array)
-        j = (i + 1 + (int(urandom(1)[0] % (n - 1)))) % n
-        assert False == Merkle.verify(root, j, path, data_array[i])
-        assert False == spark_merkle.verify(j, path, data_array[i])
-
-    # opening leafs with even one falsehood in the path should not work
-    for i in range(n):
-        path = Merkle.open(i, data_array)
-        for j in range(len(path)):
-            fake_path = path[0:j] + [urandom(32)] + path[j + 1 :]
-            assert False == Merkle.verify(root, i, fake_path, data_array[i])
-            assert False == spark_merkle.verify(i, fake_path, data_array[i])
+        assert Merkle1.verify(root, i, path, data_array[i])
 
 
 test_merkle()

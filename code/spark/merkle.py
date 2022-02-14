@@ -78,7 +78,5 @@ class Merkle:
                     root, index >> 1, path[1:], Merkle.H(path[0] + leaf).digest()
                 )
 
-    def verify(self, index, path, data_element):
-        return Merkle.verify_(
-            self.root(), index, path, Merkle.H(bytes(data_element)).digest()
-        )
+    def verify(root, index, path, data_element):
+        return Merkle.verify_(root, index, path, Merkle.H(bytes(data_element)).digest())
