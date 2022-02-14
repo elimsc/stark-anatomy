@@ -6,23 +6,31 @@ from fri import *
 from ip import *
 from stark import *
 
-def test_stark( ):
+
+def test_stark():
     field = Field.main()
     expansion_factor = 4
     num_colinearity_checks = 2
     security_level = 2
 
     rp = RescuePrime()
-    output_element = field.sample(bytes(b'0xdeadbeef'))
+    output_element = field.sample(bytes(b"0xdeadbeef"))
 
     for trial in range(0, 20):
         input_element = output_element
         print("running trial with input:", input_element.value)
         output_element = rp.hash(input_element)
-        num_cycles = rp.N+1
+        num_cycles = rp.N + 1
         state_width = rp.m
 
-        stark = Stark(field, expansion_factor, num_colinearity_checks, security_level, state_width, num_cycles)
+        stark = Stark(
+            field,
+            expansion_factor,
+            num_colinearity_checks,
+            security_level,
+            state_width,
+            num_cycles,
+        )
 
         # prove honestly
         print("honest proof generation ...")
@@ -36,7 +44,7 @@ def test_stark( ):
         # verify
         verdict = stark.verify(proof, air, boundary)
 
-        assert(verdict == True), "valid stark proof fails to verify"
+        assert verdict == True, "valid stark proof fails to verify"
         print("success \\o/")
 
         print("verifying false claim ...")
@@ -45,7 +53,7 @@ def test_stark( ):
         boundary_ = rp.boundary_constraints(output_element_)
         verdict = stark.verify(proof, air, boundary_)
 
-        assert(verdict == False), "invalid stark proof verifies"
+        assert verdict == False, "invalid stark proof verifies"
         print("proof rejected! \\o/")
 
     # verify with false witness
@@ -56,5 +64,4 @@ def test_stark( ):
 
     trace[cycle][register] = trace[cycle][register] + error
 
-    proof = stark.prove(trace, air, boundary) # should fail
-
+    proof = stark.prove(trace, air, boundary)  # should fail

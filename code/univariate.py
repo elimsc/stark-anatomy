@@ -1,10 +1,11 @@
 from algebra import *
 
+
 class Polynomial:
-    def __init__( self, coefficients ):
+    def __init__(self, coefficients):
         self.coefficients = [c for c in coefficients]
 
-    def degree( self ):
+    def degree(self):
         if self.coefficients == []:
             return -1
         zero = self.coefficients[0].field.zero()
@@ -16,10 +17,10 @@ class Polynomial:
                 maxindex = i
         return maxindex
 
-    def __neg__( self ):
+    def __neg__(self):
         return Polynomial([-c for c in self.coefficients])
 
-    def __add__( self, other ):
+    def __add__(self, other):
         if self.degree() == -1:
             return other
         elif other.degree() == -1:
@@ -32,71 +33,82 @@ class Polynomial:
             coeffs[i] = coeffs[i] + other.coefficients[i]
         return Polynomial(coeffs)
 
-    def __sub__( self, other ):
+    def __sub__(self, other):
         return self.__add__(-other)
 
-    def __mul__(self, other ):
+    def __mul__(self, other):
         if self.coefficients == [] or other.coefficients == []:
             return Polynomial([])
         zero = self.coefficients[0].field.zero()
         buf = [zero] * (len(self.coefficients) + len(other.coefficients) - 1)
         for i in range(len(self.coefficients)):
             if self.coefficients[i].is_zero():
-                continue # optimization for sparse polynomials
+                continue  # optimization for sparse polynomials
             for j in range(len(other.coefficients)):
-                buf[i+j] = buf[i+j] + self.coefficients[i] * other.coefficients[j]
+                buf[i + j] = buf[i + j] + self.coefficients[i] * other.coefficients[j]
         return Polynomial(buf)
 
-    def __truediv__( self, other ):
+    def __truediv__(self, other):
         quo, rem = Polynomial.divide(self, other)
-        assert(rem.is_zero()), "cannot perform polynomial division because remainder is not zero"
+        assert (
+            rem.is_zero()
+        ), "cannot perform polynomial division because remainder is not zero"
         return quo
 
-    def __mod__( self, other ):
+    def __mod__(self, other):
         quo, rem = Polynomial.divide(self, other)
         return rem
 
-    def __eq__( self, other ):
+    def __eq__(self, other):
         if self.degree() != other.degree():
             return False
         if self.degree() == -1:
             return True
-        return all(self.coefficients[i] == other.coefficients[i] for i in range(len(self.coefficients)))
+        return all(
+            self.coefficients[i] == other.coefficients[i]
+            for i in range(len(self.coefficients))
+        )
 
-    def __neq__( self, other ):
+    def __neq__(self, other):
         return not self.__eq__(other)
 
-    def is_zero( self ):
+    def is_zero(self):
         if self.degree() == -1:
             return True
         return False
 
-    def __str__( self ):
+    def __str__(self):
         return "[" + ",".join(s.__str__() for s in self.coefficients) + "]"
 
-    def leading_coefficient( self ):
+    def leading_coefficient(self):
         return self.coefficients[self.degree()]
 
-    def divide( numerator, denominator ):
+    def divide(numerator, denominator):
         if denominator.degree() == -1:
             return None
         if numerator.degree() < denominator.degree():
             return (Polynomial([]), numerator)
         field = denominator.coefficients[0].field
         remainder = Polynomial([n for n in numerator.coefficients])
-        quotient_coefficients = [field.zero() for i in range(numerator.degree()-denominator.degree()+1)]
-        for i in range(numerator.degree()-denominator.degree()+1):
+        quotient_coefficients = [
+            field.zero() for i in range(numerator.degree() - denominator.degree() + 1)
+        ]
+        for i in range(numerator.degree() - denominator.degree() + 1):
             if remainder.degree() < denominator.degree():
                 break
-            coefficient = remainder.leading_coefficient() / denominator.leading_coefficient()
+            coefficient = (
+                remainder.leading_coefficient() / denominator.leading_coefficient()
+            )
             shift = remainder.degree() - denominator.degree()
-            subtractee = Polynomial([field.zero()] * shift + [coefficient]) * denominator
+            subtractee = (
+                Polynomial([field.zero()] * shift + [coefficient]) * denominator
+            )
             quotient_coefficients[shift] = coefficient
             remainder = remainder - subtractee
         quotient = Polynomial(quotient_coefficients)
         return quotient, remainder
 
-    def is_zero( self ):
+    def is_zero(self):
         if self.coefficients == []:
             return True
         for c in self.coefficients:
@@ -104,9 +116,11 @@ class Polynomial:
                 return False
         return True
 
-    def interpolate_domain( domain, values ):
-        assert(len(domain) == len(values)), "number of elements in domain does not match number of values -- cannot interpolate"
-        assert(len(domain) > 0), "cannot interpolate between zero points"
+    def interpolate_domain(domain, values):
+        assert len(domain) == len(
+            values
+        ), "number of elements in domain does not match number of values -- cannot interpolate"
+        assert len(domain) > 0, "cannot interpolate between zero points"
         field = domain[0].field
         x = Polynomial([field.zero(), field.one()])
         acc = Polynomial([])
@@ -115,11 +129,15 @@ class Polynomial:
             for j in range(len(domain)):
                 if j == i:
                     continue
-                prod = prod * (x - Polynomial([domain[j]])) * Polynomial([(domain[i] - domain[j]).inverse()])
+                prod = (
+                    prod
+                    * (x - Polynomial([domain[j]]))
+                    * Polynomial([(domain[i] - domain[j]).inverse()])
+                )
             acc = acc + prod
         return acc
 
-    def zerofier_domain( domain ):
+    def zerofier_domain(domain):
         field = domain[0].field
         x = Polynomial([field.zero(), field.one()])
         acc = Polynomial([field.one()])
@@ -127,7 +145,7 @@ class Polynomial:
             acc = acc * (x - Polynomial([d]))
         return acc
 
-    def evaluate( self, point ):
+    def evaluate(self, point):
         xi = point.field.one()
         value = point.field.zero()
         for c in self.coefficients:
@@ -135,10 +153,10 @@ class Polynomial:
             xi = xi * point
         return value
 
-    def evaluate_domain( self, domain ):
+    def evaluate_domain(self, domain):
         return [self.evaluate(d) for d in domain]
 
-    def __xor__( self, exponent ):
+    def __xor__(self, exponent):
         if self.is_zero():
             return Polynomial([])
         if exponent == 0:
@@ -150,12 +168,14 @@ class Polynomial:
                 acc = acc * self
         return acc
 
-    def scale( self, factor ):
-        return Polynomial([(factor^i) * self.coefficients[i] for i in range(len(self.coefficients))])
+    def scale(self, factor):
+        return Polynomial(
+            [(factor ^ i) * self.coefficients[i] for i in range(len(self.coefficients))]
+        )
 
-def test_colinearity( points ):
+
+def test_colinearity(points):
     domain = [p[0] for p in points]
     values = [p[1] for p in points]
     polynomial = Polynomial.interpolate_domain(domain, values)
     return polynomial.degree() == 1
-
