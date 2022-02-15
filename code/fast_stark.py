@@ -147,11 +147,19 @@ class FastStark:
                 [self.field.sample(os.urandom(17)) for s in range(self.num_registers)]
             ]
 
+        trace_length = len(trace)
+
+        # trace 旋转
+        trace1 = []
+        for s in range(self.num_registers):
+            trace1 += [[trace[c][s] for c in range(trace_length)]]
+        trace = []  # trace不再被需要
+
         # interpolate
-        trace_domain = [self.omicron ^ i for i in range(len(trace))]
+        trace_domain = [self.omicron ^ i for i in range(trace_length)]
         trace_polynomials = []
         for s in range(self.num_registers):
-            single_trace = [trace[c][s] for c in range(len(trace))]
+            single_trace = trace1[s]
             trace_polynomials = trace_polynomials + [
                 fast_interpolate(
                     trace_domain, single_trace, self.omicron, self.omicron_domain_length
@@ -163,12 +171,18 @@ class FastStark:
         for s in range(self.num_registers):
             interpolant = self.boundary_interpolants(boundary)[s]
             zerofier = self.boundary_zerofiers(boundary)[s]
-            quotient = (trace_polynomials[s] - interpolant) / zerofier
+            # quotient = (trace_polynomials[s] - interpolant) / zerofier
+            quotient = fast_coset_divide(
+                trace_polynomials[s] - interpolant,
+                zerofier,
+                self.generator,
+                self.omicron,
+                self.omicron_domain_length,
+            )
             boundary_quotients += [quotient]
 
         # commit to boundary quotients
         boundary_quotient_codewords = []
-        boundary_quotient_Merkle_roots = []
         for s in range(self.num_registers):
             boundary_quotient_codewords = boundary_quotient_codewords + [
                 fast_coset_evaluate(
@@ -242,13 +256,15 @@ class FastStark:
                 max_degree
                 - self.transition_quotient_degree_bounds(transition_constraints)[i]
             )
+            # 多项式的最大阶都对齐到 max_degree
             terms += [(x ^ shift) * transition_quotients[i]]
         for i in range(self.num_registers):
             terms += [boundary_quotients[i]]
             shift = (
                 max_degree
-                - self.boundary_quotient_degree_bounds(len(trace), boundary)[i]
+                - self.boundary_quotient_degree_bounds(trace_length, boundary)[i]
             )
+            # 多项式的最大阶都对齐到 max_degree
             terms += [(x ^ shift) * boundary_quotients[i]]
 
         # take weighted sum
