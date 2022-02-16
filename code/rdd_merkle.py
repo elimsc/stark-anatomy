@@ -4,7 +4,8 @@ import math
 from pyspark import RDD
 
 
-def merkle_build(data_array: RDD, rdd_zero: RDD) -> RDD:
+def merkle_build(data_array: RDD) -> RDD:
+    rdd_zero = data_array.context.parallelize([(0, 0)])
     n = data_array.count()
     assert n & (n - 1) == 0, "must power of two"
     depth = int(math.log2(n))
@@ -26,7 +27,7 @@ def merkle_build(data_array: RDD, rdd_zero: RDD) -> RDD:
     return tree_nodes.sortByKey()
 
 
-def merkle_open(index, tree) -> RDD:  # tree: RDD[(index, value)]
+def merkle_open(index, tree) -> list:  # tree: RDD[(index, value)]
     num_nodes = tree.count()
     assert num_nodes & (num_nodes - 1) == 0, "must power of two"
     real_index = num_nodes // 2 + index
@@ -37,7 +38,9 @@ def merkle_open(index, tree) -> RDD:  # tree: RDD[(index, value)]
         else:
             path_indexes += [real_index - 1]
         real_index = real_index // 2
-    return tree.filter(lambda x: x[0] in path_indexes).sortByKey(False)
+    return (
+        tree.filter(lambda x: x[0] in path_indexes).sortByKey(False).values().collect()
+    )
 
 
 class Merkle:

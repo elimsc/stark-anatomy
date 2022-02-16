@@ -65,12 +65,10 @@ sc.addPyFile("./rdd_merkle.py")
 def test_spark_merkle():
     n = 64
 
-    rdd_zero = sc.parallelize([(0, 0)])
-
     data_array = [urandom(int(urandom(1)[0])) for i in range(n)]
     merkle1 = Merkle1(data_array)
     rdd_arr = sc.parallelize(list(enumerate(data_array)))
-    rdd_tree = merkle_build(rdd_arr, rdd_zero)
+    rdd_tree = merkle_build(rdd_arr)
 
     root = Merkle.commit(data_array)
     assert root == merkle1.root()
@@ -80,7 +78,7 @@ def test_spark_merkle():
     for i in range(n):
         path = Merkle.open(i, data_array)
         path1 = merkle1.open(i)
-        path2 = merkle_open(i, rdd_tree).map(lambda x: x[1]).collect()
+        path2 = merkle_open(i, rdd_tree)
         assert path == path1
         assert path == path2
         assert Merkle.verify(root, i, path, data_array[i])
