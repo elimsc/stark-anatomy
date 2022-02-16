@@ -1,8 +1,17 @@
+from numpy import product
 from algebra import *
+from rdd_poly import poly_degree
 from univariate import *
 from ntt import *
 import os
-from rdd_ntt import ntt1, rdd_intt, rdd_ntt
+from rdd_ntt import (
+    ntt1,
+    rdd_fast_coset_divide,
+    rdd_fast_coset_evaluate,
+    rdd_fast_multiply,
+    rdd_intt,
+    rdd_ntt,
+)
 
 from pyspark import SparkContext, SparkConf
 
@@ -14,12 +23,15 @@ sc = SparkContext(conf=conf)
 
 sc.addPyFile("./algebra.py")
 sc.addPyFile("./rdd_ntt.py")
+sc.addPyFile("./rdd_poly.py")
 sc.addPyFile("./univariate.py")
+
+f = Field.main()
 
 
 def test_ntt():
     field = Field.main()
-    logn = 8
+    logn = 7
     n = 1 << logn
     primitive_root = field.primitive_nth_root(n)
 
@@ -31,7 +43,7 @@ def test_ntt():
     values = ntt(primitive_root, coefficients)
     values1 = ntt1(primitive_root, coefficients)
     rdd_value = rdd_ntt(primitive_root, rdd_cofs)
-    values2 = [v for (_, v) in rdd_value.collect()]
+    values2 = rdd_value.values().collect()
 
     values_again = poly.evaluate_domain(
         [primitive_root ^ i for i in range(len(values))]
@@ -45,7 +57,7 @@ def test_ntt():
 def test_intt():
     field = Field.main()
 
-    logn = 8  # 仅当为偶数是生效 TODO
+    logn = 7
     n = 1 << logn
     primitive_root = field.primitive_nth_root(n)
 
@@ -71,7 +83,7 @@ def test_multiply():
     n = 1 << logn
     primitive_root = field.primitive_nth_root(n)
 
-    for trial in range(20):
+    for trial in range(5):
         lhs_degree = int(os.urandom(1)[0]) % (n // 2)
         rhs_degree = int(os.urandom(1)[0]) % (n // 2)
 
@@ -80,8 +92,14 @@ def test_multiply():
 
         fast_product = fast_multiply(lhs, rhs, primitive_root, n)
         slow_product = lhs * rhs
+        lhs1 = sc.parallelize(list(enumerate(lhs.coefficients)))
+        rhs1 = sc.parallelize(list(enumerate(rhs.coefficients)))
+        product1 = rdd_fast_multiply(lhs1, rhs1, primitive_root, n)
+
+        assert len(slow_product.coefficients) == product1.count()
 
         assert fast_product == slow_product, "fast product does not equal slow product"
+        assert slow_product.coefficients == product1.values().collect()
 
 
 def test_divide():
@@ -91,17 +109,29 @@ def test_divide():
     n = 1 << logn
     primitive_root = field.primitive_nth_root(n)
 
-    for trial in range(20):
+    for trial in range(10):
         lhs_degree = int(os.urandom(1)[0]) % (n // 2)
         rhs_degree = int(os.urandom(1)[0]) % (n // 2)
 
-        lhs = Polynomial([field.sample(os.urandom(17)) for i in range(lhs_degree + 1)])
-        rhs = Polynomial([field.sample(os.urandom(17)) for i in range(rhs_degree + 1)])
+        lhs_coffs = [field.sample(os.urandom(17)) for i in range(lhs_degree + 1)]
+        rhs_coffs = [field.sample(os.urandom(17)) for i in range(rhs_degree + 1)]
+
+        lhs = Polynomial(lhs_coffs)
+        rhs = Polynomial(rhs_coffs)
 
         fast_product = fast_multiply(lhs, rhs, primitive_root, n)
         quotient = fast_coset_divide(
             fast_product, lhs, field.generator(), primitive_root, n
         )
+
+        lhs1 = sc.parallelize(list(enumerate(fast_product.coefficients)))
+        rhs1 = sc.parallelize(list(enumerate(lhs.coefficients)))
+        quotient1 = rdd_fast_coset_divide(
+            lhs1, rhs1, field.generator(), primitive_root, n
+        )
+
+        assert quotient1.count() == len(quotient.coefficients)
+        assert quotient1.values().collect() == quotient.coefficients
 
         assert quotient == rhs, "fast divide does not equal original factor"
 
@@ -148,16 +178,22 @@ def test_coset_evaluate():
     coefficients = [field.sample(os.urandom(17)) for i in range(degree + 1)]
     poly = Polynomial(coefficients)
 
+    rdd_poly = sc.parallelize(list(enumerate(coefficients)))
+
     values_fast = fast_coset_evaluate(poly, two, primitive_root, n)
     values_traditional = [poly.evaluate(d) for d in domain]
+    values_rdd = rdd_fast_coset_evaluate(rdd_poly, two, primitive_root, n)
 
     assert all(
         vf == vt for (vf, vt) in zip(values_fast, values_traditional)
     ), "values do not match with traditional evaluations"
+    assert values_fast == values_rdd.values().collect()
 
 
-test_ntt()
-test_intt()
+# test_ntt()
+# test_intt()
 test_coset_evaluate()
+# test_divide()
+# test_multiply()
 
 sc.stop()
