@@ -2,6 +2,19 @@ from algebra import *
 from univariate import *
 from ntt import *
 import os
+from rdd_ntt import ntt1, rdd_intt, rdd_ntt
+
+from pyspark import SparkContext, SparkConf
+
+
+conf = (
+    SparkConf().setAppName("test_fast_stark").setMaster("spark://zhdeMacBook-Pro:7077")
+)
+sc = SparkContext(conf=conf)
+
+sc.addPyFile("./algebra.py")
+sc.addPyFile("./rdd_ntt.py")
+sc.addPyFile("./univariate.py")
 
 
 def test_ntt():
@@ -13,27 +26,42 @@ def test_ntt():
     coefficients = [field.sample(os.urandom(17)) for i in range(n)]
     poly = Polynomial(coefficients)
 
+    rdd_cofs = sc.parallelize(list(enumerate(coefficients)))
+
     values = ntt(primitive_root, coefficients)
+    values1 = ntt1(primitive_root, coefficients)
+    rdd_value = rdd_ntt(primitive_root, rdd_cofs)
+    values2 = [v for (_, v) in rdd_value.collect()]
 
     values_again = poly.evaluate_domain(
         [primitive_root ^ i for i in range(len(values))]
     )
 
     assert values == values_again, "ntt does not compute correct batch-evaluation"
+    assert values == values1, "rdd_ntt does not compute correct batch-evaluation"
+    assert values == values2, "rdd_ntt does not compute correct batch-evaluation"
 
 
 def test_intt():
     field = Field.main()
 
-    logn = 7
+    logn = 8  # 仅当为偶数是生效 TODO
     n = 1 << logn
     primitive_root = field.primitive_nth_root(n)
 
+    ninv = FieldElement(n, field).inverse()
+
     values = [field.sample(os.urandom(1)) for i in range(n)]
     coeffs = ntt(primitive_root, values)
+
+    rdd_coeffs = sc.parallelize(list(enumerate(coeffs)))
+
     values_again = intt(primitive_root, coeffs)
+    rdd_value = rdd_intt(primitive_root, ninv, rdd_coeffs)
+    values2 = [v for (_, v) in rdd_value.collect()]
 
     assert values == values_again, "inverse ntt is different from forward ntt"
+    assert values == values2, "rdd_intt dont work"
 
 
 def test_multiply():
@@ -126,3 +154,10 @@ def test_coset_evaluate():
     assert all(
         vf == vt for (vf, vt) in zip(values_fast, values_traditional)
     ), "values do not match with traditional evaluations"
+
+
+test_ntt()
+test_intt()
+test_coset_evaluate()
+
+sc.stop()
