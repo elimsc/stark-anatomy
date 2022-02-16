@@ -6,6 +6,12 @@ from functools import reduce
 import os
 
 
+def next_power_two(n):
+    if n & (n - 1) == 0:
+        return n
+    return 1 << len(bin(n)[2:])
+
+
 class FastStark:
     def __init__(
         self,
@@ -33,10 +39,13 @@ class FastStark:
         self.num_colinearity_checks = num_colinearity_checks
         self.security_level = security_level
 
-        self.num_randomizers = 4 * num_colinearity_checks
-
         self.num_registers = num_registers
         self.original_trace_length = num_cycles
+
+        # self.num_randomizers = 4 * num_colinearity_checks
+        self.num_randomizers = (
+            next_power_two(self.original_trace_length) - self.original_trace_length
+        )
 
         self.randomized_trace_length = self.original_trace_length + self.num_randomizers
         self.omicron_domain_length = 1 << len(
@@ -155,6 +164,8 @@ class FastStark:
             trace1 += [[trace[c][s] for c in range(trace_length)]]
         trace = []  # trace不再被需要
 
+        # print("trace_length", trace_length)
+
         # interpolate
         trace_domain = [self.omicron ^ i for i in range(trace_length)]
         trace_polynomials = []
@@ -165,6 +176,8 @@ class FastStark:
                     trace_domain, single_trace, self.omicron, self.omicron_domain_length
                 )
             ]
+
+        # print("interpolate trace finished")
 
         # subtract boundary interpolants and divide out boundary zerofiers
         boundary_quotients = []
@@ -181,6 +194,8 @@ class FastStark:
             )
             boundary_quotients += [quotient]
 
+        # print("boundary quotients generated")
+
         # commit to boundary quotients
         boundary_quotient_codewords = []
         for s in range(self.num_registers):
@@ -195,6 +210,8 @@ class FastStark:
             merkle_root = Merkle.commit(boundary_quotient_codewords[s])
             proof_stream.push(merkle_root)
 
+        # print("boundary quotients commited")
+
         # symbolically evaluate transition constraints
         point = (
             [Polynomial([self.field.zero(), self.field.one()])]
@@ -204,6 +221,8 @@ class FastStark:
         transition_polynomials = [
             a.evaluate_symbolic(point) for a in transition_constraints
         ]
+
+        # print("transition_polynomials generated")
 
         # divide out zerofier
         transition_quotients = [
@@ -217,6 +236,8 @@ class FastStark:
             for tp in transition_polynomials
         ]
 
+        # print("transition_quotients generated")
+
         # commit to randomizer polynomial
         randomizer_polynomial = Polynomial(
             [
@@ -229,6 +250,8 @@ class FastStark:
         )
         randomizer_root = Merkle.commit(randomizer_codeword)
         proof_stream.push(randomizer_root)
+
+        # print("transition_quotients committed")
 
         # get weights for nonlinear combination
         #  - 1 randomizer
@@ -256,7 +279,7 @@ class FastStark:
                 max_degree
                 - self.transition_quotient_degree_bounds(transition_constraints)[i]
             )
-            # 多项式的最大阶都对齐到 max_degree
+            # 多项式的最大阶都变为 max_degree
             terms += [(x ^ shift) * transition_quotients[i]]
         for i in range(self.num_registers):
             terms += [boundary_quotients[i]]
@@ -264,7 +287,7 @@ class FastStark:
                 max_degree
                 - self.boundary_quotient_degree_bounds(trace_length, boundary)[i]
             )
-            # 多项式的最大阶都对齐到 max_degree
+            # 多项式的最大阶都变为 max_degree
             terms += [(x ^ shift) * boundary_quotients[i]]
 
         # take weighted sum
@@ -327,7 +350,9 @@ class FastStark:
 
         # infer trace length from boundary conditions
         original_trace_length = 1 + max(c for c, r, v in boundary)
-        randomized_trace_length = original_trace_length + self.num_randomizers
+        randomized_trace_length = (
+            original_trace_length + self.num_randomizers
+        )  # TODO change it
 
         # deserialize with right proof stream
         if proof_stream == None:
