@@ -1,6 +1,7 @@
 from merkle import Merkle
 from os import urandom
-from spark.merkle import Merkle as Merkle1
+from rdd_merkle import Merkle as Merkle1
+from rdd_merkle import merkle_build, merkle_open
 
 
 def test_merkle():
@@ -50,23 +51,42 @@ def test_merkle():
         assert False == Merkle.verify_(fake_root, i, path, leafs[i])
 
 
+from pyspark import SparkContext, SparkConf
+
+
+conf = (
+    SparkConf().setAppName("test_fast_stark").setMaster("spark://zhdeMacBook-Pro:7077")
+)
+sc = SparkContext(conf=conf)
+
+sc.addPyFile("./rdd_merkle.py")
+
+
 def test_spark_merkle():
     n = 64
 
+    rdd_zero = sc.parallelize([(0, 0)])
+
     data_array = [urandom(int(urandom(1)[0])) for i in range(n)]
-    spark_merkle = Merkle1(data_array)
+    merkle1 = Merkle1(data_array)
+    rdd_arr = sc.parallelize(list(enumerate(data_array)))
+    rdd_tree = merkle_build(rdd_arr, rdd_zero)
 
     root = Merkle.commit(data_array)
-    assert root == spark_merkle.root()
+    assert root == merkle1.root()
+    assert root == rdd_tree.take(2)[1][1]
 
     # opening any leaf should work
     for i in range(n):
         path = Merkle.open(i, data_array)
-        path1 = spark_merkle.open(i)
+        path1 = merkle1.open(i)
+        path2 = merkle_open(i, rdd_tree).map(lambda x: x[1]).collect()
         assert path == path1
+        assert path == path2
         assert Merkle.verify(root, i, path, data_array[i])
         assert Merkle1.verify(root, i, path, data_array[i])
 
 
 test_merkle()
 test_spark_merkle()
+sc.stop()
