@@ -27,7 +27,7 @@ def merkle_build(data_array: RDD) -> RDD:
     return tree_nodes.sortByKey()
 
 
-def merkle_open(index, tree) -> list:  # tree: RDD[(index, value)]
+def merkle_open(index, tree: RDD) -> list:  # tree: RDD[(index, value)]
     num_nodes = tree.count()
     assert num_nodes & (num_nodes - 1) == 0, "must power of two"
     real_index = num_nodes // 2 + index
@@ -41,6 +41,9 @@ def merkle_open(index, tree) -> list:  # tree: RDD[(index, value)]
     return (
         tree.filter(lambda x: x[0] in path_indexes).sortByKey(False).values().collect()
     )
+
+def merkle_root(tree: RDD):
+    return tree.take(2)[1][1]
 
 
 class Merkle:
