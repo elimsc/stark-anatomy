@@ -1,10 +1,12 @@
 from algebra import *
 from fri import *
+from rdd_ntt import ntt1
+from time import time
 
 
 def test_fri():
     field = Field.main()
-    degree = 63
+    degree = 2**10 - 1
     expansion_factor = 4
     num_colinearity_tests = 17
 
@@ -40,16 +42,24 @@ def test_fri():
     polynomial = Polynomial([FieldElement(i, field) for i in range(degree + 1)])
     domain = [omega ^ i for i in range(initial_codeword_length)]
 
-    codeword = polynomial.evaluate_domain(domain)
+    start = time()
+    codeword = fast_coset_evaluate(
+        polynomial, FieldElement(1, field), omega, initial_codeword_length
+    )
+    print("ntt time:", time() - start)
 
     # test valid codeword
     print("testing valid codeword ...")
     proof_stream = ProofStream()
 
+    start = time()
     fri.prove(codeword, proof_stream)
-    print("")
+    print("fri prove time:", time() - start)
     points = []
+
+    start = time()
     verdict = fri.verify(proof_stream, points)
+    print("fri verify time:", time() - start)
     if verdict == False:
         print("rejecting proof, but proof should be valid!")
         return
@@ -72,3 +82,6 @@ def test_fri():
         proof_stream, points
     ), "proof should fail, but is accepted ..."
     print("success! \\o/")
+
+
+test_fri()

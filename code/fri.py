@@ -1,3 +1,4 @@
+from logging import root
 from algebra import *
 from merkle import *
 from ip import *
@@ -7,6 +8,8 @@ import math
 from hashlib import blake2b
 
 from univariate import *
+from util import *
+from rdd_merkle import Merkle as Merkle1
 
 
 class Fri:
@@ -27,13 +30,19 @@ class Fri:
 
         assert self.num_rounds() >= 1, "cannot do FRI with less than one round"
 
-    def num_rounds(self):
+    def last_layer_size(self):
+        return max(
+            self.expansion_factor, next_power_two(4 * self.num_colinearity_tests)
+        )
+
+    def num_rounds(self):  # 一般为第一个大于 4 * num_colinearity_tests 的2的幂
         codeword_length = self.domain_length
         num_rounds = 0
-        while (
-            codeword_length > self.expansion_factor
-            and 4 * self.num_colinearity_tests < codeword_length
-        ):
+        # while (
+        #     codeword_length > self.expansion_factor
+        #     and 4 * self.num_colinearity_tests < codeword_length
+        # ):
+        while codeword_length >= self.last_layer_size():
             codeword_length /= 2
             num_rounds += 1
         return num_rounds
@@ -45,6 +54,7 @@ class Fri:
         return acc % size
 
     def sample_indices(self, seed, size, reduced_size, number):
+        # reduced_size 为最后一层的点的个数
         assert (
             number <= reduced_size
         ), f"cannot sample more indices than available in last codeword; requested: {number}, available: {reduced_size}"
@@ -74,10 +84,15 @@ class Fri:
         omega = self.omega
         offset = self.offset
         codewords = []
+        merkle_trees = []
+
+        codeword_length = self.domain_length
+
+        # print("in fri.commit, first layer codeword length:", codeword_length)
 
         # for each round
         for r in range(self.num_rounds()):
-            N = len(codeword)
+            N = codeword_length
 
             # make sure omega has the right order
             assert (
@@ -85,7 +100,9 @@ class Fri:
             ), "error in commit: omega does not have the right order!"
 
             # compute and send Merkle root
-            root = Merkle.commit(codeword)
+            tree = Merkle1(codeword)
+            merkle_trees += [tree]
+            root = tree.root()
             proof_stream.push(root)
 
             # prepare next round, but only if necessary
@@ -110,19 +127,30 @@ class Fri:
 
             omega = omega ^ 2
             offset = offset ^ 2
+            codeword_length = codeword_length // 2
 
         # send last codeword
+        # print("in fri.commit, last layer codeword length:", len(codeword))
         proof_stream.push(codeword)
 
         # collect last codeword too
         codewords = codewords + [codeword]
 
-        return codewords
+        return codewords, merkle_trees
 
-    def query(self, current_codeword, next_codeword, c_indices, proof_stream):
+    def query(
+        self,
+        current_codeword_length,
+        current_codeword,
+        next_codeword,
+        cur_merkle_tree,
+        next_merkle_tree,
+        c_indices,
+        proof_stream,
+    ):
         # infer a and b indices
         a_indices = [index for index in c_indices]
-        b_indices = [index + len(current_codeword) // 2 for index in c_indices]
+        b_indices = [index + current_codeword_length // 2 for index in c_indices]
 
         # reveal leafs
         for s in range(self.num_colinearity_tests):
@@ -136,9 +164,12 @@ class Fri:
 
         # reveal authentication paths
         for s in range(self.num_colinearity_tests):
-            proof_stream.push(Merkle.open(a_indices[s], current_codeword))
-            proof_stream.push(Merkle.open(b_indices[s], current_codeword))
-            proof_stream.push(Merkle.open(c_indices[s], next_codeword))
+            path_a = cur_merkle_tree.open(a_indices[s])
+            path_b = cur_merkle_tree.open(b_indices[s])
+            path_c = next_merkle_tree.open(c_indices[s])
+            proof_stream.push(path_a)
+            proof_stream.push(path_b)
+            proof_stream.push(path_c)
 
         return a_indices + b_indices
 
@@ -148,21 +179,32 @@ class Fri:
         ), "initial codeword length does not match length of initial codeword"
 
         # commit phase
-        codewords = self.commit(codeword, proof_stream)
+        codewords, merkle_trees = self.commit(codeword, proof_stream)
+
+        assert len(codewords[1]) == self.domain_length // 2
 
         # get indices
         top_level_indices = self.sample_indices(
             proof_stream.prover_fiat_shamir(),
-            len(codewords[1]),
-            len(codewords[-1]),
+            self.domain_length // 2,
+            self.last_layer_size(),
             self.num_colinearity_tests,
         )
         indices = [index for index in top_level_indices]
 
         # query phase
         for i in range(len(codewords) - 1):
-            indices = [index % (len(codewords[i]) // 2) for index in indices]  # fold
-            self.query(codewords[i], codewords[i + 1], indices, proof_stream)
+            cur_codeword_length = self.domain_length // (2**i)
+            indices = [index % (cur_codeword_length // 2) for index in indices]  # fold
+            self.query(
+                cur_codeword_length,
+                codewords[i],
+                codewords[i + 1],
+                merkle_trees[i],
+                merkle_trees[i + 1],
+                indices,
+                proof_stream,
+            )
 
         return top_level_indices
 
@@ -202,9 +244,9 @@ class Fri:
         last_domain = [
             last_offset * (last_omega ^ i) for i in range(len(last_codeword))
         ]
-        poly = Polynomial.interpolate_domain(last_domain, last_codeword)
-        # coefficients = intt(last_omega, last_codeword)
-        # poly = Polynomial(coefficients).scale(last_offset.inverse())
+        # poly = Polynomial.interpolate_domain(last_domain, last_codeword)
+        coefficients = intt(last_omega, last_codeword)
+        poly = Polynomial(coefficients).scale(last_offset.inverse())
 
         # verify by  evaluating
         assert (
