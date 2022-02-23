@@ -115,11 +115,40 @@ class MPolynomial:
     # 如果f(X,Y,Z) = X*Y*Z + 3*X^2*Y*Z, point为(poly([0,1]),poly([0,0,1]),poly([0,0,0,1])), 此次point代表(X, Y=X^2, Z=X^3)
     # 输出为 [0,0,0,0,0,0,1,3], 代表 f = X^6 + 3*X^7
     def evaluate_symbolic(self, point):
+        exp_values = [[] for i in range(len(point))]
+        for k, v in self.dictionary.items():
+            for i in range(1, len(k)):
+                if k[i] == 0:
+                    continue
+                if k[i] not in exp_values[i]:
+                    exp_values[i] += [k[i]]
+        for i in range(1, len(exp_values)):
+            exp_values[i] = sorted(exp_values[i])
+
+        exp_cache = dict()
+        for i in range(1, len(exp_values)):  # 事先求出 point[i]^k
+            item = exp_values[i]
+            cur_poly = point[i] ^ item[0]
+            exp_cache[(i, item[0])] = cur_poly
+            for j in range(1, len(item)):
+                need = point[i] ^ (item[j] - item[j - 1])
+                cur_poly = cur_poly * need
+                exp_cache[(i, item[j])] = cur_poly
+
         acc = Polynomial([])
         for k, v in self.dictionary.items():
-            prod = Polynomial([v])
-            for i in range(len(k)):
-                prod = prod * (point[i] ^ k[i])
+            prod = Polynomial([])
+            for i in range(1, len(k)):
+                if k[i] == 0:
+                    continue
+                if prod == Polynomial([]):
+                    prod = exp_cache[(i, k[i])]
+                else:
+                    prod = prod * exp_cache[(i, k[i])]
+            cofs = [v * cof for cof in prod.coefficients]
+            if len(cofs) == 0:
+                cofs = [v]
+            prod = Polynomial([v.field.zero()] * k[0] + cofs)
             acc = acc + prod
         return acc
 

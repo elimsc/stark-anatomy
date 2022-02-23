@@ -1,5 +1,6 @@
 from numpy import diag_indices
 from fri import *
+from multivariate_eval import multivariate_evaluate_symbolic
 from univariate import *
 from multivariate import *
 from ntt import *
@@ -179,7 +180,7 @@ class FastStark:
             trace_length,
             "omicron_domain_length",
             self.omicron_domain_length,
-            "fir_domain_length",
+            "fri_domain_length",
             self.fri_domain_length,
         )
 
@@ -246,6 +247,12 @@ class FastStark:
         transition_polynomials = [
             a.evaluate_symbolic(point) for a in transition_constraints
         ]
+        # transition_polynomials = [
+        #     multivariate_evaluate_symbolic(
+        #         a, point, self.omicron, self.omicron_domain_length
+        #     )
+        #     for a in transition_constraints
+        # ]
         print("finished", time() - start)
 
         # divide out zerofier
