@@ -2,17 +2,9 @@ from algebra import FieldElement
 from rdd_poly import *
 from rdd_fast_stark import FastStark as RddFastStark
 
-from pyspark import SparkContext, SparkConf
+from test_spark import get_sc
 
-conf = (
-    SparkConf().setAppName("test_fast_stark").setMaster("spark://zhdeMacBook-Pro:7077")
-)
-sc = SparkContext(conf=conf)
-
-sc.addPyFile("./algebra.py")
-sc.addPyFile("./rdd_ntt.py")
-sc.addPyFile("./univariate.py")
-sc.addPyFile("./rdd_merkle.py")
+sc = get_sc("test_poly")
 
 f = Field.main()
 
@@ -49,7 +41,39 @@ def test_poly_scale():
     assert poly.values().collect() == field_list([1, 4, 12, 32])
 
 
-test_poly_sub_list()
-test_poly_append_zero()
-test_poly_degree()
-test_poly_scale()
+def test_poly_mul_x():
+    poly = rdd_field_list([1, 2, 3, 4])
+    poly = poly_mul_x(poly, 3)
+    assert poly.values().collect() == field_list([0, 0, 0, 1, 2, 3, 4])
+
+
+def test_poly_combine():
+    poly1 = rdd_field_list([1, 2, 3, 4])
+    a = FieldElement(2, f)
+    poly2 = rdd_field_list([1, 1, 1, 1])
+    b = FieldElement(3, f)
+    poly = poly_combine(poly1, poly2, a, b)
+    assert poly.values().collect() == field_list([5, 7, 9, 11])
+
+    poly3 = rdd_field_list([6, 4, 2, 0])
+    c = FieldElement(1, f)
+    poly = poly_combine_list([poly1, poly2, poly3], [a, b, c])
+    assert poly.values().collect() == field_list([11, 11, 11, 11])
+
+
+def test_rdd_take_by_indexs():
+    rdd = rdd_field_list(list(range(2, 102)))
+    assert rdd_take_by_indexs(rdd, [50, 70]) == dict(
+        {50: FieldElement(52, f), 70: FieldElement(72, f)}
+    )
+
+
+# test_poly_sub_list()
+# test_poly_append_zero()
+# test_poly_degree()
+# test_poly_scale()
+# test_poly_mul_x()
+# test_poly_combine()
+test_rdd_take_by_indexs()
+
+sc.stop()

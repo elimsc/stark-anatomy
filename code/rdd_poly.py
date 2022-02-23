@@ -18,8 +18,41 @@ def poly_append_zero(poly: RDD, start, zero_count: int) -> RDD:
     return poly
 
 
-# def poly_add(lhs: RDD, rhs: RDD) -> RDD:
-#     return lhs.zip(rhs).map(lambda v: v[0] + v[1])
+def poly_mul_x(poly: RDD, n) -> RDD:
+    zero = Field.main().zero()
+    sc = poly.context
+    poly = poly.map(lambda x: (x[0] + n, x[1]))
+    poly = sc.parallelize([i, zero] for i in range(n)).union(poly)
+    return poly
+
+
+# a * poly1 + b * poly2
+def poly_combine(poly1: RDD, poly2: RDD, a, b) -> RDD:
+    poly1 = poly1.map(lambda x: (x[0], x[1] * a))
+    poly2 = poly2.map(lambda x: (x[0], x[1] * b))
+
+    def sum_list(l):
+        sum = l[0]
+        for v in l[1:]:
+            sum += v
+        return sum
+
+    return (
+        poly1.union(poly2)
+        .groupByKey()
+        .mapValues(list)
+        .map(lambda x: (x[0], sum_list(x[1])))
+    )
+
+
+def poly_combine_list(polys: list[RDD], vs: list) -> RDD:
+    assert len(polys) == len(vs)
+    assert len(vs) > 2
+    one = vs[0].field.one()
+    poly = poly_combine(polys[0], polys[1], vs[0], vs[1])
+    for i in range(2, len(vs)):
+        poly = poly_combine(poly, polys[i], one, vs[i])
+    return poly
 
 
 def poly_sub_list(lhs: RDD, rhs: list) -> RDD:
@@ -31,6 +64,10 @@ def poly_sub_list(lhs: RDD, rhs: list) -> RDD:
         return x
 
     return lhs.map(lambda x: sub(x, rhs))
+
+
+def rdd_take_by_indexs(rdd: RDD, indexs: list):
+    return rdd.filter(lambda x: x[0] in indexs).collectAsMap()
 
 
 # [g ^ i for i in range(size)]
