@@ -264,6 +264,8 @@ class FastStark:
         print("finished", time() - start)
 
         # commit to randomizer polynomial
+        print("commit to randomizer polynomial")
+        start = time()
         randomizer_polynomial = Polynomial(
             [
                 self.field.sample(os.urandom(17))
@@ -275,6 +277,7 @@ class FastStark:
         )
         randomizer_root = Merkle.commit(randomizer_codeword)
         proof_stream.push(randomizer_root)
+        print("finished", time() - start)
 
         # print("transition_quotients committed")
 
@@ -362,13 +365,16 @@ class FastStark:
         print("finished", time() - start)
 
         # ... as well as in the randomizer
+        print("open indicated positions in the randomizer_codeword")
+        start = time()
         for i in quadrupled_indices:
             proof_stream.push(randomizer_codeword[i])
             path = Merkle.open(i, randomizer_codeword)
             proof_stream.push(path)
+        print("finished", time() - start)
 
         # ... and also in the zerofier!
-        print("open indicated positions in the transition_zerofier_codewords")
+        print("open indicated positions in the transition_zerofier_codeword")
         start = time()
         for i in quadrupled_indices:
             proof_stream.push(transition_zerofier_codeword[i])
