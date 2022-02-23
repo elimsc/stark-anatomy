@@ -1,9 +1,11 @@
+from numpy import diag_indices
 from fri import *
 from univariate import *
 from multivariate import *
 from ntt import *
 from functools import reduce
 import os
+from time import time
 
 
 def next_power_two(n):
@@ -21,7 +23,7 @@ class FastStark:
         security_level,
         num_registers,
         num_cycles,
-        transition_constraints_degree=2,
+        transition_constraints_degree=3,
     ):
         assert (
             len(bin(field.p)) - 2 >= security_level
@@ -48,8 +50,11 @@ class FastStark:
         )
 
         self.randomized_trace_length = self.original_trace_length + self.num_randomizers
-        self.omicron_domain_length = 1 << len(
-            bin(self.randomized_trace_length * transition_constraints_degree)[2:]
+        # self.omicron_domain_length = 1 << len(
+        #     bin(self.randomized_trace_length * transition_constraints_degree)[2:]
+        # )
+        self.omicron_domain_length = next_power_two(
+            self.randomized_trace_length * transition_constraints_degree
         )
         self.fri_domain_length = self.omicron_domain_length * expansion_factor
 
@@ -72,7 +77,7 @@ class FastStark:
         transition_zerofier = fast_zerofier(
             self.omicron_domain[: (self.original_trace_length - 1)],
             self.omicron,
-            len(self.omicron_domain),
+            self.omicron_domain_length,
         )
         transition_zerofier_codeword = fast_coset_evaluate(
             transition_zerofier, self.generator, self.omega, self.fri.domain_length
@@ -90,7 +95,9 @@ class FastStark:
         ] * 2 * self.num_registers
         return [
             max(
-                sum(r * l for r, l in zip(point_degrees, k))
+                sum(
+                    r * l for r, l in zip(point_degrees, k)
+                )  # randomlized_poly_degree * transition_degree
                 for k, v in a.dictionary.items()
             )
             for a in transition_constraints
@@ -102,6 +109,7 @@ class FastStark:
             for d in self.transition_degree_bounds(transition_constraints)
         ]
 
+    # 组合多项式的阶
     def max_degree(self, transition_constraints):
         md = max(self.transition_quotient_degree_bounds(transition_constraints))
         return (1 << (len(bin(md)[2:]))) - 1
@@ -150,13 +158,15 @@ class FastStark:
         if proof_stream == None:
             proof_stream = ProofStream()
 
+        assert self.max_degree(transition_constraints) + 1 == self.omicron_domain_length
+
         # concatenate randomizers
         for k in range(self.num_randomizers):
             trace = trace + [
                 [self.field.sample(os.urandom(17)) for s in range(self.num_registers)]
             ]
 
-        trace_length = len(trace)
+        trace_length = self.randomized_trace_length
 
         # trace 旋转
         trace1 = []
@@ -164,26 +174,39 @@ class FastStark:
             trace1 += [[trace[c][s] for c in range(trace_length)]]
         trace = []  # trace不再被需要
 
-        # print("trace_length", trace_length)
+        print(
+            "trace_length",
+            trace_length,
+            "omicron_domain_length",
+            self.omicron_domain_length,
+            "fir_domain_length",
+            self.fri_domain_length,
+        )
 
         # interpolate
+        print("interpolate trace_polynomials")
+        start = time()
         trace_domain = [self.omicron ^ i for i in range(trace_length)]
         trace_polynomials = []
         for s in range(self.num_registers):
             single_trace = trace1[s]
             trace_polynomials = trace_polynomials + [
+                # TODO: replace with ntt
                 fast_interpolate(
                     trace_domain, single_trace, self.omicron, self.omicron_domain_length
                 )
             ]
-
-        # print("interpolate trace finished")
+        print("finished", time() - start)
 
         # subtract boundary interpolants and divide out boundary zerofiers
+        print("subtract boundary interpolants and divide out boundary zerofiers")
+        start = time()
         boundary_quotients = []
+        boundary_interpolants = self.boundary_interpolants(boundary)
+        boundary_zerofiers = self.boundary_zerofiers(boundary)
         for s in range(self.num_registers):
-            interpolant = self.boundary_interpolants(boundary)[s]
-            zerofier = self.boundary_zerofiers(boundary)[s]
+            interpolant = boundary_interpolants[s]
+            zerofier = boundary_zerofiers[s]
             # quotient = (trace_polynomials[s] - interpolant) / zerofier
             quotient = fast_coset_divide(
                 trace_polynomials[s] - interpolant,
@@ -193,10 +216,11 @@ class FastStark:
                 self.omicron_domain_length,
             )
             boundary_quotients += [quotient]
-
-        # print("boundary quotients generated")
+        print("finished", time() - start)
 
         # commit to boundary quotients
+        print("commit to boundary quotients")
+        start = time()
         boundary_quotient_codewords = []
         for s in range(self.num_registers):
             boundary_quotient_codewords = boundary_quotient_codewords + [
@@ -209,10 +233,11 @@ class FastStark:
             ]
             merkle_root = Merkle.commit(boundary_quotient_codewords[s])
             proof_stream.push(merkle_root)
-
-        # print("boundary quotients commited")
+        print("finished", time() - start)
 
         # symbolically evaluate transition constraints
+        print("symbolically evaluate transition constraints")
+        start = time()
         point = (
             [Polynomial([self.field.zero(), self.field.one()])]
             + trace_polynomials
@@ -221,10 +246,11 @@ class FastStark:
         transition_polynomials = [
             a.evaluate_symbolic(point) for a in transition_constraints
         ]
-
-        # print("transition_polynomials generated")
+        print("finished", time() - start)
 
         # divide out zerofier
+        print("transition_polynomials divide out zerofier")
+        start = time()
         transition_quotients = [
             fast_coset_divide(
                 tp,
@@ -235,14 +261,13 @@ class FastStark:
             )
             for tp in transition_polynomials
         ]
-
-        # print("transition_quotients generated")
+        print("finished", time() - start)
 
         # commit to randomizer polynomial
         randomizer_polynomial = Polynomial(
             [
                 self.field.sample(os.urandom(17))
-                for i in range(self.max_degree(transition_constraints) + 1)
+                for i in range(self.omicron_domain_length)
             ]
         )
         randomizer_codeword = fast_coset_evaluate(
@@ -270,7 +295,7 @@ class FastStark:
 
         # compute terms of nonlinear combination polynomial
         x = Polynomial([self.field.zero(), self.field.one()])
-        max_degree = self.max_degree(transition_constraints)
+        max_degree = self.omicron_domain_length - 1
         terms = []
         terms += [randomizer_polynomial]
         for i in range(len(transition_quotients)):
@@ -292,19 +317,28 @@ class FastStark:
 
         # take weighted sum
         # combination = sum(weights[i] * terms[i] for all i)
+        print("compute combination polynomial")
+        start = time()
         combination = reduce(
             lambda a, b: a + b,
             [Polynomial([weights[i]]) * terms[i] for i in range(len(terms))],
             Polynomial([]),
         )
+        print("finished", time() - start)
 
         # compute matching codeword
+        print("compute combined_codeword")
+        start = time()
         combined_codeword = fast_coset_evaluate(
             combination, self.generator, self.omega, self.fri_domain_length
         )
+        print("finished", time() - start)
 
         # prove low degree of combination polynomial, and collect indices
+        print("prove low degree of combination polynomial, and collect indices")
+        start = time()
         indices = self.fri.prove(combined_codeword, proof_stream)
+        print("finished", time() - start)
 
         # process indices
         duplicated_indices = [i for i in indices] + [
@@ -314,14 +348,18 @@ class FastStark:
             (i + (self.fri.domain_length // 2)) % self.fri.domain_length
             for i in duplicated_indices
         ]
+        assert 4 * self.num_colinearity_checks == len(quadrupled_indices)
         quadrupled_indices.sort()
 
         # open indicated positions in the boundary quotient codewords
+        print("open indicated positions in the boundary quotient codewords")
+        start = time()
         for bqc in boundary_quotient_codewords:
             for i in quadrupled_indices:
                 proof_stream.push(bqc[i])
                 path = Merkle.open(i, bqc)
                 proof_stream.push(path)
+        print("finished", time() - start)
 
         # ... as well as in the randomizer
         for i in quadrupled_indices:
@@ -330,10 +368,13 @@ class FastStark:
             proof_stream.push(path)
 
         # ... and also in the zerofier!
+        print("open indicated positions in the transition_zerofier_codewords")
+        start = time()
         for i in quadrupled_indices:
             proof_stream.push(transition_zerofier_codeword[i])
             path = Merkle.open(i, transition_zerofier_codeword)
             proof_stream.push(path)
+        print("finished", time() - start)
 
         # the final proof is just the serialized stream
         return proof_stream.serialize()
@@ -350,9 +391,7 @@ class FastStark:
 
         # infer trace length from boundary conditions
         original_trace_length = 1 + max(c for c, r, v in boundary)
-        randomized_trace_length = (
-            original_trace_length + self.num_randomizers
-        )  # TODO change it
+        randomized_trace_length = original_trace_length + self.num_randomizers
 
         # deserialize with right proof stream
         if proof_stream == None:
@@ -448,6 +487,7 @@ class FastStark:
                 ) + interpolant.evaluate(domain_next_index)
 
             point = [domain_current_index] + current_trace + next_trace
+            # transition_constraints 在对应 (X, current_trace, next_trace) 处的值
             transition_constraints_values = [
                 transition_constraints[s].evaluate(point)
                 for s in range(len(transition_constraints))
@@ -457,7 +497,9 @@ class FastStark:
             counter = 0
             terms = []
             terms += [randomizer[current_index]]
-            for s in range(len(transition_constraints_values)):
+            for s in range(
+                len(transition_constraints_values)
+            ):  # 求阶对齐后的 transition_quotient
                 tcv = transition_constraints_values[s]
                 quotient = tcv / transition_zerofier[current_index]
                 terms += [quotient]
@@ -466,7 +508,7 @@ class FastStark:
                     - self.transition_quotient_degree_bounds(transition_constraints)[s]
                 )
                 terms += [quotient * (domain_current_index ^ shift)]
-            for s in range(self.num_registers):
+            for s in range(self.num_registers):  # 求阶对齐后的 boundary quotient
                 bqv = leafs[s][current_index]  # boundary quotient value
                 terms += [bqv]
                 shift = (
@@ -476,6 +518,7 @@ class FastStark:
                     )[s]
                 )
                 terms += [bqv * (domain_current_index ^ shift)]
+            # 根据上面的randomizer值, transition_quotient值, boundary_quotient值, 求出组合多项式的值
             combination = reduce(
                 lambda a, b: a + b,
                 [terms[j] * weights[j] for j in range(len(terms))],
@@ -483,6 +526,7 @@ class FastStark:
             )
 
             # verify against combination polynomial value
+            # 验证 自己求出来的组合多项式的值 和 fri第一层的merkle树上的值 是否相等
             verifier_accepts = verifier_accepts and (combination == values[i])
             if not verifier_accepts:
                 return False
