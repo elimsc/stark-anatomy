@@ -55,3 +55,29 @@ def test_lift():
     ), "lifting univariate to multivariate failed"
 
     print("lifting univariate to multivariate polynomial success \\o/")
+
+
+def test_evaluate_symbolic():
+    field = Field.main()
+    variables = MPolynomial.variables(3, field)
+    zero = field.zero()
+    one = field.one()
+    three = FieldElement(3, field)
+    # f(X,Y,Z) = 1 + X*Y*Z + 3*X^2*Y*Z
+    mpoly1 = (
+        MPolynomial.constant(one)
+        + MPolynomial.constant(one) * variables[0] * variables[1] * variables[2]
+        + MPolynomial.constant(three) * (variables[0] ^ 2) * variables[1] * variables[2]
+    )
+    assert mpoly1.dictionary == dict({(0, 0, 0): one, (1, 1, 1): one, (2, 1, 1): three})
+    # X, X^2, X^3
+    point = [
+        Polynomial([zero, one]),
+        Polynomial([zero, zero, one]),
+        Polynomial([zero, zero, zero, one]),
+    ]
+    poly1 = mpoly1.evaluate_symbolic(point)  # 1 + X^6 + 3X^7
+    assert poly1 == Polynomial([one, zero, zero, zero, zero, zero, one, three])
+
+
+test_evaluate_symbolic()

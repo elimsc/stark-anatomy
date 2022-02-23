@@ -100,6 +100,8 @@ class MPolynomial:
             variables = variables + [MPolynomial({tuple(exponent): field.one()})]
         return variables
 
+    # point是一个元组，因为需要同时提供X,Y,Z...等处的值
+    # 结果为f(X,Y,Z...)在这里的取值，是一个标量
     def evaluate(self, point):
         acc = point[0].field.zero()
         for k, v in self.dictionary.items():
@@ -109,6 +111,9 @@ class MPolynomial:
             acc = acc + prod
         return acc
 
+    # 输入的point的每一项是一个多项式
+    # 如果f(X,Y,Z) = X*Y*Z + 3*X^2*Y*Z, point为(poly([0,1]),poly([0,0,1]),poly([0,0,0,1])), 此次point代表(X, Y=X^2, Z=X^3)
+    # 输出为 [0,0,0,0,0,0,1,3], 代表 f = X^6 + 3*X^7
     def evaluate_symbolic(self, point):
         acc = Polynomial([])
         for k, v in self.dictionary.items():
