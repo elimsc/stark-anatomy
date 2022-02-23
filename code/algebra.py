@@ -51,6 +51,15 @@ class FieldElement:
     def __neq__(self, other):
         return self.value != other.value
 
+    def __lt__(self, other):
+        return self.value < other.value
+
+    def __format__(self, __format_spec: str) -> str:
+        return str("Field[" + self.value + "]")
+
+    def __repr__(self) -> str:
+        return str("Field[" + str(self.value) + "]")
+
     def __str__(self):
         return str(self.value)
 
