@@ -1,6 +1,4 @@
-from numpy import diag_indices
 from fri import *
-from multivariate_eval import multivariate_evaluate_symbolic
 from univariate import *
 from multivariate import *
 from ntt import *
@@ -104,6 +102,13 @@ class FastStark:
             for a in transition_constraints
         ]
 
+    def get_transition_polynomials(
+        self, transition_constraints_f, cur_state_polys, next_state_polys
+    ):
+        return transition_constraints_f(
+            cur_state_polys, next_state_polys, self.omicron, self.omicron_domain_length
+        )
+
     def transition_quotient_degree_bounds(self, transition_constraints):
         return [
             d - (self.original_trace_length - 1)
@@ -149,7 +154,8 @@ class FastStark:
     def prove(
         self,
         trace,
-        transition_constraints,
+        # transition_constraints,
+        transition_constraints_f,
         boundary,
         transition_zerofier,
         transition_zerofier_codeword,
@@ -159,7 +165,7 @@ class FastStark:
         if proof_stream == None:
             proof_stream = ProofStream()
 
-        assert self.max_degree(transition_constraints) + 1 == self.omicron_domain_length
+        # assert self.max_degree(transition_constraints) + 1 == self.omicron_domain_length
 
         # concatenate randomizers
         for k in range(self.num_randomizers):
@@ -237,16 +243,21 @@ class FastStark:
         print("finished", time() - start)
 
         # symbolically evaluate transition constraints
-        print("symbolically evaluate transition constraints")
+        print("get transition_polynomials from transition constraints")
         start = time()
-        point = (
-            [Polynomial([self.field.zero(), self.field.one()])]
-            + trace_polynomials
-            + [tp.scale(self.omicron) for tp in trace_polynomials]
+        # point = (
+        #     [Polynomial([self.field.zero(), self.field.one()])]
+        #     + trace_polynomials
+        #     + [tp.scale(self.omicron) for tp in trace_polynomials]
+        # )
+        # transition_polynomials = [
+        #     a.evaluate_symbolic(point) for a in transition_constraints
+        # ]
+        transition_polynomials = self.get_transition_polynomials(
+            transition_constraints_f,
+            trace_polynomials,
+            [tp.scale(self.omicron) for tp in trace_polynomials],
         )
-        transition_polynomials = [
-            a.evaluate_symbolic(point) for a in transition_constraints
-        ]
         # transition_polynomials = [
         #     multivariate_evaluate_symbolic(
         #         a, point, self.omicron, self.omicron_domain_length
@@ -297,11 +308,11 @@ class FastStark:
             proof_stream.prover_fiat_shamir(),
         )
 
-        assert [
-            tq.degree() for tq in transition_quotients
-        ] == self.transition_quotient_degree_bounds(
-            transition_constraints
-        ), "transition quotient degrees do not match with expectation"
+        # assert [
+        #     tq.degree() for tq in transition_quotients
+        # ] == self.transition_quotient_degree_bounds(
+        #     transition_constraints
+        # ), "transition quotient degrees do not match with expectation"
 
         # compute terms of nonlinear combination polynomial
         x = Polynomial([self.field.zero(), self.field.one()])
@@ -310,18 +321,12 @@ class FastStark:
         terms += [randomizer_polynomial]
         for i in range(len(transition_quotients)):
             terms += [transition_quotients[i]]
-            shift = (
-                max_degree
-                - self.transition_quotient_degree_bounds(transition_constraints)[i]
-            )
+            shift = max_degree - transition_quotients[i].degree()
             # 多项式的最大阶都变为 max_degree
             terms += [(x ^ shift) * transition_quotients[i]]
         for i in range(self.num_registers):
             terms += [boundary_quotients[i]]
-            shift = (
-                max_degree
-                - self.boundary_quotient_degree_bounds(trace_length, boundary)[i]
-            )
+            shift = max_degree - boundary_quotients[i].degree()
             # 多项式的最大阶都变为 max_degree
             terms += [(x ^ shift) * boundary_quotients[i]]
 

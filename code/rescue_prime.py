@@ -293,6 +293,66 @@ class RescuePrime:
 
         return first_step_constants, second_step_constants
 
+    def round_constants_polynomials1(self, omicron, omicron_domain_length):
+        first_step_constants = []
+        domain = [omicron ^ r for r in range(0, self.N)]
+
+        for i in range(self.m):
+            values = [
+                self.get_round_constant(2 * r * self.m + i) for r in range(self.N)
+            ]
+            univariate = fast_interpolate(
+                domain, values, omicron, omicron_domain_length
+            )
+            first_step_constants += [univariate]
+        second_step_constants = []
+        for i in range(self.m):
+            values = [
+                self.get_round_constant(2 * r * self.m + self.m + i)
+                for r in range(self.N)
+            ]
+            univariate = fast_interpolate(
+                domain, values, omicron, omicron_domain_length
+            )
+            second_step_constants += [univariate]
+
+        return first_step_constants, second_step_constants
+
+    def transition_constaints_f(
+        self,
+        prev_state_polys: list[Polynomial],
+        next_state_polys: list[Polynomial],
+        omicron,
+        omicron_domain_length,
+    ):
+        print("--------get polynomials that interpolate through the round constants")
+        start = time()
+        first_step_constants, second_step_constants = self.round_constants_polynomials1(
+            omicron, omicron_domain_length
+        )
+        print("--------", time() - start)
+        air = []
+        for i in range(self.m):
+            # compute left hand side symbolically
+            # lhs = sum(MPolynomial.constant(self.MDS[i][k]) * (previous_state[k]^self.alpha) for k in range(self.m)) + first_step_constants[i]
+            lhs = Polynomial([])
+            for k in range(self.m):
+                lhs += Polynomial([self.MDS[i][k]]) * (prev_state_polys[k] ^ self.alpha)
+            lhs += first_step_constants[i]
+
+            # compute right hand side symbolically
+            # rhs = sum(MPolynomial.constant(self.MDSinv[i][k]) * (next_state[k] - second_step_constants[k]) for k in range(self.m))^self.alpha
+            rhs = Polynomial([])
+            for k in range(self.m):
+                rhs += Polynomial([self.MDSinv[i][k]]) * (
+                    next_state_polys[k] - second_step_constants[k]
+                )
+            rhs = rhs ^ self.alpha
+
+            # equate left and right hand sides
+            air += [lhs - rhs]
+        return air
+
     def transition_constraints(self, omicron, omicron_domain_length):
         # get polynomials that interpolate through the round constants
         print("--------get polynomials that interpolate through the round constants")

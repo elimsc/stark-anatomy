@@ -99,7 +99,7 @@ def test_fast_stark_time():
     num_colinearity_checks = 2
     security_level = 2
 
-    rp = RescuePrime(50)
+    rp = RescuePrime(300)
     output_element = field.sample(bytes(b"0xdeadbeef"))
 
     for trial in range(0, 1):  # 20
@@ -128,26 +128,28 @@ def test_fast_stark_time():
 
         # prove
         trace = rp.trace(input_element)
-        print("compute air")
-        start = time()
-        air = rp.transition_constraints(stark.omicron, stark.omicron_domain_length)
-        print("finished", time() - start)
-
-        print("compute bounday")
-        start = time()
         boundary = rp.boundary_constraints(output_element)
-        print("finished", time() - start)
 
         print("stark prove--------------------")
         start = time()
         proof = stark.prove(
-            trace, air, boundary, transition_zerofier, transition_zerofier_codeword
+            trace,
+            rp.transition_constaints_f,
+            boundary,
+            transition_zerofier,
+            transition_zerofier_codeword,
         )
         print("prove time:", time() - start)
 
         # verify
+        print("\ncompute air")
+        start = time()
+        air = rp.transition_constraints(stark.omicron, stark.omicron_domain_length)
+        print("finished", time() - start)
+        print("stark verify--------------------")
+        start = time()
         verdict = stark.verify(proof, air, boundary, transition_zerofier_root)
-
+        print("finished", time() - start)
         assert verdict == True, "valid stark proof fails to verify"
         print("success \\o/")
 
@@ -158,7 +160,7 @@ def test_rdd_fast_stark():
     num_colinearity_checks = 2
     security_level = 2
 
-    rp = RescuePrime()
+    rp = RescuePrime(1000)
     output_element = field.sample(bytes(b"0xdeadbeef"))
 
     for trial in range(0, 1):  # 20
@@ -208,7 +210,7 @@ def test_rdd_fast_stark():
 
 
 # test_fast_stark()
-# test_fast_stark_time()
-test_rdd_fast_stark()
+test_fast_stark_time()
+# test_rdd_fast_stark()
 
 sc.stop()
