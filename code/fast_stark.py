@@ -49,6 +49,9 @@ class FastStark:
         )
 
         self.randomized_trace_length = self.original_trace_length + self.num_randomizers
+        self.randomized_primitive_root = self.field.primitive_nth_root(
+            self.randomized_trace_length
+        )
         # self.omicron_domain_length = 1 << len(
         #     bin(self.randomized_trace_length * transition_constraints_degree)[2:]
         # )
@@ -154,13 +157,18 @@ class FastStark:
     def prove(
         self,
         trace,
-        # transition_constraints,
+        round_constants_polys,
         transition_constraints_f,
         boundary,
         transition_zerofier,
         transition_zerofier_codeword,
         proof_stream=None,
     ):
+        def get_transition_polynomials(cur_state, next_state):
+            return transition_constraints_f(
+                cur_state, next_state, round_constants_polys
+            )
+
         # create proof stream object if necessary
         if proof_stream == None:
             proof_stream = ProofStream()
@@ -253,8 +261,7 @@ class FastStark:
         # transition_polynomials = [
         #     a.evaluate_symbolic(point) for a in transition_constraints
         # ]
-        transition_polynomials = self.get_transition_polynomials(
-            transition_constraints_f,
+        transition_polynomials = get_transition_polynomials(
             trace_polynomials,
             [tp.scale(self.omicron) for tp in trace_polynomials],
         )

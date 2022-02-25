@@ -260,60 +260,26 @@ class RescuePrime:
 
         return constraints
 
-    def round_constants_polynomials(self, omicron, omicron_domain_length):
+    def round_constants_polynomials(self, primitive_root, root_order):
         first_step_constants = []
-        domain = [omicron ^ r for r in range(0, self.N)]
+        domain_length = self.N + 10
+
+        domain = [primitive_root ^ r for r in range(domain_length)]
 
         for i in range(self.m):
             values = [
-                self.get_round_constant(2 * r * self.m + i) for r in range(self.N)
+                self.get_round_constant(2 * r * self.m + i)
+                for r in range(domain_length)
             ]
-            univariate = fast_interpolate(
-                domain, values, omicron, omicron_domain_length
-            )
-            # univariate = Polynomial.interpolate_domain(domain, values)
-            multivariate = MPolynomial.lift(univariate, 0)
-            first_step_constants += [multivariate]
-        second_step_constants = []
-        for i in range(self.m):
-            # values = [self.field.zero()] * self.N
-            # for r in range(self.N):
-            #    print("len(round_constants):", len(self.round_constants), " but grabbing index:", 2*r*self.m+self.m+i, "for r=", r, "for m=", self.m, "for i=", i)
-            #    values[r] = self.get_round_constant(2*r*self.m + self.m + i]
-            values = [
-                self.get_round_constant(2 * r * self.m + self.m + i)
-                for r in range(self.N)
-            ]
-            univariate = fast_interpolate(
-                domain, values, omicron, omicron_domain_length
-            )
-            # univariate = Polynomial.interpolate_domain(domain, values)
-            multivariate = MPolynomial.lift(univariate, 0)
-            second_step_constants += [multivariate]
-
-        return first_step_constants, second_step_constants
-
-    def round_constants_polynomials1(self, omicron, omicron_domain_length):
-        first_step_constants = []
-        domain = [omicron ^ r for r in range(0, self.N)]
-
-        for i in range(self.m):
-            values = [
-                self.get_round_constant(2 * r * self.m + i) for r in range(self.N)
-            ]
-            univariate = fast_interpolate(
-                domain, values, omicron, omicron_domain_length
-            )
+            univariate = fast_interpolate(domain, values, primitive_root, root_order)
             first_step_constants += [univariate]
         second_step_constants = []
         for i in range(self.m):
             values = [
                 self.get_round_constant(2 * r * self.m + self.m + i)
-                for r in range(self.N)
+                for r in range(domain_length)
             ]
-            univariate = fast_interpolate(
-                domain, values, omicron, omicron_domain_length
-            )
+            univariate = fast_interpolate(domain, values, primitive_root, root_order)
             second_step_constants += [univariate]
 
         return first_step_constants, second_step_constants
@@ -322,15 +288,10 @@ class RescuePrime:
         self,
         prev_state_polys: list[Polynomial],
         next_state_polys: list[Polynomial],
-        omicron,
-        omicron_domain_length,
+        round_constants,
     ):
-        print("--------get polynomials that interpolate through the round constants")
-        start = time()
-        first_step_constants, second_step_constants = self.round_constants_polynomials1(
-            omicron, omicron_domain_length
-        )
-        print("--------", time() - start)
+        first_step_constants = round_constants[0]
+        second_step_constants = round_constants[1]
         air = []
         for i in range(self.m):
             # compute left hand side symbolically
@@ -353,14 +314,9 @@ class RescuePrime:
             air += [lhs - rhs]
         return air
 
-    def transition_constraints(self, omicron, omicron_domain_length):
-        # get polynomials that interpolate through the round constants
-        print("--------get polynomials that interpolate through the round constants")
-        start = time()
-        first_step_constants, second_step_constants = self.round_constants_polynomials(
-            omicron, omicron_domain_length
-        )
-        print("--------", time() - start)
+    def transition_constraints(self, round_constants):
+        first_step_constants = round_constants[0]
+        second_step_constants = round_constants[1]
 
         # arithmetize one round of Rescue-Prime
         variables = MPolynomial.variables(1 + 2 * self.m, self.field)
