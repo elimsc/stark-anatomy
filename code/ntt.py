@@ -28,8 +28,7 @@ def ntt(primitive_root, values):
     ]
 
 
-# values为RDD，输出为RDD, [] * x
-def intt(primitive_root, values):
+def intt(primitive_root, values) -> list:
     assert (
         len(values) & (len(values) - 1) == 0
     ), "cannot compute intt of non-power-of-two sequence"
@@ -44,8 +43,9 @@ def intt(primitive_root, values):
     return [ninv * tv for tv in transformed_values]
 
 
-# lhs, rhs为RDD，输出为RDD, [] * []
-def fast_multiply(lhs, rhs, primitive_root, root_order):
+def fast_multiply(
+    lhs: Polynomial, rhs: Polynomial, primitive_root, root_order
+) -> Polynomial:
     assert (
         primitive_root ^ root_order == primitive_root.field.one()
     ), "supplied root does not have supplied order"
@@ -84,7 +84,6 @@ def fast_multiply(lhs, rhs, primitive_root, root_order):
     return Polynomial(product_coefficients[0 : (degree + 1)])
 
 
-# domain 为RDD，输出为RDD
 def fast_zerofier(domain, primitive_root, root_order):
     assert (
         primitive_root ^ root_order == primitive_root.field.one()
@@ -106,8 +105,7 @@ def fast_zerofier(domain, primitive_root, root_order):
     return fast_multiply(left, right, primitive_root, root_order)
 
 
-# polynomial, domain 为RDD，输出为RDD
-def fast_evaluate(polynomial, domain, primitive_root, root_order):
+def fast_evaluate(polynomial: Polynomial, domain, primitive_root, root_order):
     assert (
         primitive_root ^ root_order == primitive_root.field.one()
     ), "supplied root does not have supplied order"
@@ -136,7 +134,23 @@ def fast_evaluate(polynomial, domain, primitive_root, root_order):
     return left + right
 
 
-# domain, values 为RDD，输出为RDD
+# def fast_evaluate(polynomial: Polynomial, domain, primitive_root, root_order):
+#     if len(domain) <= 256:
+#         return fast_evaluate1(polynomial, domain, primitive_root, root_order)
+#     values = ntt(
+#         primitive_root,
+#         polynomial.coefficients
+#         + [primitive_root.field.zero()] * (root_order - len(polynomial.coefficients)),
+#     )
+#     start = 0
+#     for i in range(root_order):
+#         if primitive_root ^ i == domain[0]:
+#             start = i
+#             break
+
+#     return values[start : start + len(domain)]
+
+
 def fast_interpolate(domain, values, primitive_root, root_order):
     assert (
         primitive_root ^ root_order == primitive_root.field.one()
@@ -182,7 +196,6 @@ def fast_interpolate(domain, values, primitive_root, root_order):
     return left_interpolant * right_zerofier + right_interpolant * left_zerofier
 
 
-# polynomial 为RDD, 输出为RDD
 def fast_coset_evaluate(polynomial: Polynomial, offset, generator, order):
     scaled_polynomial = polynomial.scale(offset)
     values = ntt(
@@ -193,7 +206,6 @@ def fast_coset_evaluate(polynomial: Polynomial, offset, generator, order):
     return values
 
 
-# lhs, rhs 为RDD，输出为RDD
 def fast_coset_divide(
     lhs: Polynomial, rhs: Polynomial, offset, primitive_root, root_order
 ):  # clean division only!

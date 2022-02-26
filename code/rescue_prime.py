@@ -261,11 +261,15 @@ class RescuePrime:
         return constraints
 
     def round_constants_polynomials(self, primitive_root, root_order):
-        first_step_constants = []
-        domain_length = self.N + 10
+        assert (
+            primitive_root ^ root_order == primitive_root.field.one()
+        ), "supplied root does not have supplied order"
+        assert root_order >= self.N
 
+        domain_length = self.N
         domain = [primitive_root ^ r for r in range(domain_length)]
 
+        first_step_constants = []
         for i in range(self.m):
             values = [
                 self.get_round_constant(2 * r * self.m + i)
@@ -320,12 +324,8 @@ class RescuePrime:
 
         # arithmetize one round of Rescue-Prime
         variables = MPolynomial.variables(1 + 2 * self.m, self.field)
-        # point = (
-        #     [Polynomial([self.field.zero(), self.field.one()])]
-        #     + trace_polynomials
-        #     + [tp.scale(self.omicron) for tp in trace_polynomials]
-        # )
-        # 这里的 previous_state 和 next_state 分别和上面的 trace_polynomials 和 [tp.scale(self.omicron)] 对应
+
+        # 这里的 previous_state 和 next_state 分别和 trace_polynomials 和 [tp.scale(self.omicron)] 对应
         cycle_index = variables[0]
         previous_state = variables[1 : (1 + self.m)]
         next_state = variables[(1 + self.m) : (1 + 2 * self.m)]

@@ -43,18 +43,15 @@ class FastStark:
         self.num_registers = num_registers
         self.original_trace_length = num_cycles
 
-        # self.num_randomizers = 4 * num_colinearity_checks
+        # self.num_randomizers >= 4 * num_colinearity_checks
         self.num_randomizers = (
-            next_power_two(self.original_trace_length) - self.original_trace_length
+            next_power_two(self.original_trace_length + 4 * num_colinearity_checks)
+            - self.original_trace_length
         )
 
         self.randomized_trace_length = self.original_trace_length + self.num_randomizers
-        self.randomized_primitive_root = self.field.primitive_nth_root(
-            self.randomized_trace_length
-        )
-        # self.omicron_domain_length = 1 << len(
-        #     bin(self.randomized_trace_length * transition_constraints_degree)[2:]
-        # )
+
+        # self.omicron_domain_length = self.randomized_trace_length
         self.omicron_domain_length = next_power_two(
             self.randomized_trace_length * transition_constraints_degree
         )
@@ -63,6 +60,7 @@ class FastStark:
         self.generator = self.field.generator()
         self.omega = self.field.primitive_nth_root(self.fri_domain_length)
         self.omicron = self.field.primitive_nth_root(self.omicron_domain_length)
+        # self.ce_root = self.field.primitive_nth_root(self.ce_domain_length)
         self.omicron_domain = [
             self.omicron ^ i for i in range(self.omicron_domain_length)
         ]
@@ -104,13 +102,6 @@ class FastStark:
             )
             for a in transition_constraints
         ]
-
-    def get_transition_polynomials(
-        self, transition_constraints_f, cur_state_polys, next_state_polys
-    ):
-        return transition_constraints_f(
-            cur_state_polys, next_state_polys, self.omicron, self.omicron_domain_length
-        )
 
     def transition_quotient_degree_bounds(self, transition_constraints):
         return [
