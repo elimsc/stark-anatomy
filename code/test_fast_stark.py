@@ -99,7 +99,7 @@ def test_fast_stark_time():
     num_colinearity_checks = 2
     security_level = 2
 
-    rp = RescuePrime(40)
+    rp = RescuePrime(4000)
     output_element = field.sample(bytes(b"0xdeadbeef"))
 
     for trial in range(0, 1):  # 20
@@ -130,9 +130,12 @@ def test_fast_stark_time():
         trace = rp.trace(input_element)
         boundary = rp.boundary_constraints(output_element)
 
+        print("compute round_constants_polynomials")
+        start = time()
         round_constants1 = rp.round_constants_polynomials(
             stark.omicron, stark.omicron_domain_length
         )
+        print(time() - start)
 
         print("stark prove--------------------")
         start = time()
@@ -157,7 +160,14 @@ def test_fast_stark_time():
         print("finished", time() - start)
         print("stark verify--------------------")
         start = time()
-        verdict = stark.verify(proof, air, boundary, transition_zerofier_root)
+        verdict = stark.verify(
+            proof,
+            air,
+            round_constants1,
+            rp.transition_constaints_f,
+            boundary,
+            transition_zerofier_root,
+        )
         print("finished", time() - start)
         assert verdict == True, "valid stark proof fails to verify"
         print("success \\o/")

@@ -2,7 +2,7 @@ from time import time
 from algebra import *
 from univariate import *
 from multivariate import *
-from ntt import fast_interpolate
+from ntt import fast_interpolate, intt
 
 
 class RescuePrime:
@@ -266,8 +266,7 @@ class RescuePrime:
         ), "supplied root does not have supplied order"
         assert root_order >= self.N
 
-        domain_length = self.N
-        domain = [primitive_root ^ r for r in range(domain_length)]
+        domain_length = root_order
 
         first_step_constants = []
         for i in range(self.m):
@@ -275,7 +274,7 @@ class RescuePrime:
                 self.get_round_constant(2 * r * self.m + i)
                 for r in range(domain_length)
             ]
-            univariate = fast_interpolate(domain, values, primitive_root, root_order)
+            univariate = Polynomial(intt(primitive_root, values))
             first_step_constants += [univariate]
         second_step_constants = []
         for i in range(self.m):
@@ -283,26 +282,34 @@ class RescuePrime:
                 self.get_round_constant(2 * r * self.m + self.m + i)
                 for r in range(domain_length)
             ]
-            univariate = fast_interpolate(domain, values, primitive_root, root_order)
+            univariate = Polynomial(intt(primitive_root, values))
             second_step_constants += [univariate]
 
         return first_step_constants, second_step_constants
 
     def transition_constaints_f(
         self,
-        prev_state_polys: list[Polynomial],
-        next_state_polys: list[Polynomial],
+        prev_state: list,
+        next_state: list,
         round_constants,
+        is_poly=True,
     ):
+        if not is_poly:
+            prev_state = [Polynomial([v]) for v in prev_state]
+            next_state = [Polynomial([v]) for v in next_state]
         first_step_constants = round_constants[0]
         second_step_constants = round_constants[1]
+        if not is_poly:
+            first_step_constants = [Polynomial([v]) for v in first_step_constants]
+            second_step_constants = [Polynomial([v]) for v in second_step_constants]
+
         air = []
         for i in range(self.m):
             # compute left hand side symbolically
             # lhs = sum(MPolynomial.constant(self.MDS[i][k]) * (previous_state[k]^self.alpha) for k in range(self.m)) + first_step_constants[i]
             lhs = Polynomial([])
             for k in range(self.m):
-                lhs += Polynomial([self.MDS[i][k]]) * (prev_state_polys[k] ^ self.alpha)
+                lhs += Polynomial([self.MDS[i][k]]) * (prev_state[k] ^ self.alpha)
             lhs += first_step_constants[i]
 
             # compute right hand side symbolically
@@ -310,13 +317,16 @@ class RescuePrime:
             rhs = Polynomial([])
             for k in range(self.m):
                 rhs += Polynomial([self.MDSinv[i][k]]) * (
-                    next_state_polys[k] - second_step_constants[k]
+                    next_state[k] - second_step_constants[k]
                 )
             rhs = rhs ^ self.alpha
 
             # equate left and right hand sides
             air += [lhs - rhs]
-        return air
+        if is_poly:
+            return air
+        else:
+            return [poly.coefficients[0] for poly in air]
 
     def transition_constraints(self, round_constants):
         first_step_constants = round_constants[0]
