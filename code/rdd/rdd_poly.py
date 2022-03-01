@@ -75,7 +75,7 @@ def rdd_ntt(
 
     return (
         values.map(lambda x: (x[0] % r, (x[0] // r, x[1])))
-        .Key(sc.defaultParallelism * 2)  # r
+        .groupByKey(sc.defaultParallelism * 2)  # r
         .persist(StorageLevel.MEMORY_AND_DISK)
         .mapValues(list)
         .flatMap(
@@ -257,7 +257,7 @@ def poly_append_zero(poly: RDD, start, zero_count: int) -> RDD:
     zero = Field.main().zero()
     sc = poly.context
     poly = poly.union(sc.parallelize([(start + i, zero) for i in range(zero_count)]))
-    return poly.persist(StorageLevel.MEMORY_AND_DISK)
+    return poly
 
 
 def poly_mul_x(poly: RDD, n) -> RDD:

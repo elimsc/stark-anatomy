@@ -108,7 +108,7 @@ def merkle_build(data_array: RDD, n) -> RDD:
         sc.parallelize([(0, 0)] + top_tree)
         .union(subtree)
         .sortByKey()
-        .persist(StorageLevel.MEMORY_AND_DISK)
+        .persist(StorageLevel.DISK_ONLY)
     )
 
 

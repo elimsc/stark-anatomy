@@ -1,4 +1,4 @@
-from pyspark import RDD, SparkContext
+from pyspark import RDD, SparkContext, StorageLevel
 from rdd.rdd_fri import *
 from rdd.rdd_poly import (
     poly_degree,
@@ -30,7 +30,7 @@ def next_power_two(n):
 
 def rdd_from_poly(sc: SparkContext, poly: Polynomial) -> RDD:
     arr = poly.coefficients
-    return sc.parallelize(list(enumerate(arr)))
+    return sc.parallelize(list(enumerate(arr))).persist(StorageLevel.MEMORY_AND_DISK)
 
 
 def poly_from_rdd(rdd: RDD) -> Polynomial:
