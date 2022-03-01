@@ -13,9 +13,7 @@ import sys
 from rdd.rdd_fast_stark import FastStark as RddFastStark
 
 
-# conf = SparkConf().set("spark.driver.memory", "8g").set("spark.executor.memory", "4g")
-
-# sc = SparkContext(conf=conf)
+conf = SparkConf().set("spark.driver.memory", "8g").set("spark.executor.memory", "4g")
 
 
 def test_fast_stark():
@@ -135,7 +133,7 @@ def test_fast_stark_time():
 
         print("compute round_constants_polynomials")
         start = time()
-        round_constants1 = rp.round_constants_polynomials(
+        round_constants = rp.round_constants_polynomials(
             stark.omicron, stark.omicron_domain_length
         )
         print(time() - start)
@@ -144,8 +142,8 @@ def test_fast_stark_time():
         start = time()
         proof = stark.prove(
             trace,
-            round_constants1,
-            rp.trasition_constaints_evaluate,
+            round_constants,
+            rp.trasition_constaints,
             boundary,
             transition_zerofier,
             transition_zerofier_codeword,
@@ -153,21 +151,13 @@ def test_fast_stark_time():
         print("prove time:", time() - start)
 
         # verify
-        print("\ncompute air")
-        start = time()
 
-        temp = []
-        for poly_list in round_constants1:
-            temp += [[MPolynomial.lift(poly, 0) for poly in poly_list]]
-        air = rp.transition_constraints(temp)
-        print("finished", time() - start)
         print("stark verify--------------------")
         start = time()
         verdict = stark.verify(
             proof,
-            air,
-            round_constants1,
-            rp.trasition_constaints_evaluate,
+            round_constants,
+            rp.trasition_constaints,
             boundary,
             transition_zerofier_root,
         )
@@ -181,8 +171,9 @@ def test_rdd_fast_stark():
     expansion_factor = 4
     num_colinearity_checks = 2
     security_level = 2
+    sc = SparkContext(conf=conf)
 
-    rp = RescuePrime(1000)
+    rp = RescuePrime(40)
     output_element = field.sample(bytes(b"0xdeadbeef"))
 
     for trial in range(0, 1):  # 20
@@ -218,21 +209,43 @@ def test_rdd_fast_stark():
         assert len(trace1) == stark.num_registers, "len(trace1) == stark.num_registers"
         assert trace1[0].take(1)[0][0] == 0
         trace = trace1
-        air = rp.transition_constraints(stark.omicron, stark.omicron_domain_length)
         boundary = rp.boundary_constraints(output_element)
-        proof = stark.prove(
-            trace, air, boundary, transition_zerofier, transition_zerofier_codeword
+
+        print("compute round_constants_polynomials")
+        start = time()
+        round_constants = rp.round_constants_polynomials(
+            stark.omicron, stark.omicron_domain_length
         )
+        print(time() - start)
 
-        # verify
-        verdict = stark.verify(proof, air, boundary, transition_zerofier_root)
+        print("stark prove--------------------")
+        start = time()
+        proof = stark.prove(
+            trace,
+            round_constants,
+            rp.rdd_transition_constaints,
+            boundary,
+            transition_zerofier,
+            transition_zerofier_codeword,
+        )
+        print("prove time:", time() - start)
 
+        sc.stop()
+
+        print("stark verify--------------------")
+        start = time()
+        verdict = stark.verify(
+            proof,
+            round_constants,
+            rp.trasition_constaints,
+            boundary,
+            transition_zerofier_root,
+        )
+        print("finished", time() - start)
         assert verdict == True, "valid stark proof fails to verify"
         print("success \\o/")
 
 
 # test_fast_stark()
-test_fast_stark_time()
-# test_rdd_fast_stark()
-
-# sc.stop()
+# test_fast_stark_time()
+test_rdd_fast_stark()

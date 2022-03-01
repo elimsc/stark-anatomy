@@ -1,5 +1,6 @@
 from pyspark import SparkConf
 from base.algebra import FieldElement
+from base.ntt import fast_multiply
 from rdd.rdd_poly import *
 from rdd.rdd_fast_stark import FastStark as RddFastStark
 
@@ -69,12 +70,30 @@ def test_rdd_take_by_indexs():
     )
 
 
-test_poly_sub_list()
-test_poly_append_zero()
-test_poly_degree()
-test_poly_scale()
-test_poly_mul_x()
-test_poly_combine()
-test_rdd_take_by_indexs()
+def test_poly_exp():
+    field = Field.main()
+
+    logn = 10
+    n = 1 << logn
+    primitive_root = field.primitive_nth_root(n)
+
+    poly = rdd_field_list([1, 2, 3, 4])
+    poly1 = poly
+    exp = 5
+    for i in range(1, exp):
+        poly1 = rdd_fast_multiply(poly1, poly, primitive_root, n)
+
+    poly2 = poly_exp(poly, exp, primitive_root, n)
+    assert poly1.collect() == poly2.collect()
+
+
+# test_poly_sub_list()
+# test_poly_append_zero()
+# test_poly_degree()
+# test_poly_scale()
+# test_poly_mul_x()
+# test_poly_combine()
+# test_rdd_take_by_indexs()
+test_poly_exp()
 
 sc.stop()

@@ -1,3 +1,4 @@
+from numpy import poly
 from pyspark import RDD, SparkContext, StorageLevel
 
 from base.algebra import Field
@@ -108,7 +109,9 @@ def rdd_intt(
     values: RDD,
 ) -> RDD:
     transformed_values = rdd_ntt(primitive_root.inverse(), values)
-    return transformed_values.map(lambda x: (x[0], x[1] * ninv))
+    return transformed_values.map(lambda x: (x[0], x[1] * ninv)).persist(
+        StorageLevel.MEMORY_AND_DISK
+    )
 
 
 def rdd_fast_coset_evaluate(polynomial: RDD, offset, generator, order):
@@ -118,7 +121,7 @@ def rdd_fast_coset_evaluate(polynomial: RDD, offset, generator, order):
         generator,
         poly_append_zero(scaled_polynomial, cur_len, order - cur_len),
     )
-    return values
+    return values.persist(StorageLevel.MEMORY_AND_DISK)
 
 
 # lhs, rhs为RDD，输出为RDD, [] * []
@@ -144,7 +147,7 @@ def rdd_fast_multiply(lhs: RDD, rhs: RDD, primitive_root, root_order) -> RDD:
         lhs = Polynomial(lhs.values().collect())
         rhs = Polynomial(rhs.values().collect())
         poly = lhs * rhs
-        return sc.parallelize(poly.coefficients)
+        return sc.parallelize(list(enumerate(poly.coefficients)))
 
     while degree < order // 2:
         root = root ^ 2
@@ -169,7 +172,9 @@ def rdd_fast_multiply(lhs: RDD, rhs: RDD, primitive_root, root_order) -> RDD:
     )
     product_coefficients = rdd_intt(root, ninv, hadamard_product)
 
-    return product_coefficients.filter(lambda x: x[0] <= degree)
+    return product_coefficients.filter(lambda x: x[0] <= degree).persist(
+        StorageLevel.MEMORY_AND_DISK
+    )
 
 
 def rdd_fast_zerofier(domain: RDD, primitive_root, root_order) -> RDD:
@@ -253,14 +258,18 @@ def rdd_fast_coset_divide(
         lambda x: x[0] <= (lhs_degree - rhs_degree)
     )
 
-    return poly_scale(scaled_quotient, offset.inverse())
+    return poly_scale(scaled_quotient, offset.inverse()).persist(
+        StorageLevel.MEMORY_AND_DISK
+    )
 
 
 # --------------- poly ops -----------------------------
 
 
 def poly_scale(poly: RDD, factor) -> RDD:  # poly: RDD[(index,v)]
-    return poly.map(lambda x: (x[0], (factor ^ x[0]) * x[1]))
+    return poly.map(lambda x: (x[0], (factor ^ x[0]) * x[1])).persist(
+        StorageLevel.MEMORY_AND_DISK
+    )
 
 
 def poly_degree(poly: RDD) -> int:
@@ -284,21 +293,10 @@ def poly_mul_x(poly: RDD, n) -> RDD:
 
 # a * poly1 + b * poly2
 def poly_combine(poly1: RDD, poly2: RDD, a, b) -> RDD:
-    poly1 = poly1.map(lambda x: (x[0], x[1] * a))
-    poly2 = poly2.map(lambda x: (x[0], x[1] * b))
+    poly1 = poly_mul_constant(poly1, a)
+    poly2 = poly_mul_constant(poly2, b)
 
-    def sum_list(l):
-        sum = l[0]
-        for v in l[1:]:
-            sum += v
-        return sum
-
-    return (
-        poly1.union(poly2)
-        .groupByKey()
-        .mapValues(list)
-        .map(lambda x: (x[0], sum_list(x[1])))
-    )
+    return poly_add(poly1, poly2)
 
 
 def poly_combine_list(polys: list, vs: list) -> RDD:
@@ -308,11 +306,11 @@ def poly_combine_list(polys: list, vs: list) -> RDD:
     poly = poly_combine(polys[0], polys[1], vs[0], vs[1])
     for i in range(2, len(vs)):
         poly = poly_combine(poly, polys[i], one, vs[i])
-    return poly
+    return poly.persist(StorageLevel.MEMORY_AND_DISK)
 
 
 def poly_sub_list(lhs: RDD, rhs: list) -> RDD:
-    assert lhs.count() >= len(rhs)
+    # assert lhs.count() >= len(rhs)
 
     def sub(x, rhs):
         if x[0] < len(rhs):
@@ -320,6 +318,49 @@ def poly_sub_list(lhs: RDD, rhs: list) -> RDD:
         return x
 
     return lhs.map(lambda x: sub(x, rhs))
+
+
+def poly_mul_constant(lhs: RDD, constant) -> RDD:
+    return lhs.map(lambda x: (x[0], x[1] * constant))
+
+
+def poly_exp(rdd: RDD, exponent, primitive_root, root_order) -> RDD:
+    assert exponent >= 0
+    one = rdd.context.parallelize([(0, primitive_root.field.one())])
+    if exponent == 0:
+        return one
+    acc = one
+    for i in reversed(range(len(bin(exponent)[2:]))):
+        acc = rdd_fast_multiply(acc, acc, primitive_root, root_order)
+        if (1 << i) & exponent != 0:
+            acc = rdd_fast_multiply(acc, rdd, primitive_root, root_order)
+    return acc
+
+
+def poly_add(lhs: RDD, rhs: RDD) -> RDD:
+    def sum_arr(l: list):
+        assert len(l) > 0
+        sum = l[0]
+        for i in range(1, len(l)):
+            sum += l[i]
+        return sum
+
+    return (
+        lhs.union(rhs).groupByKey().mapValues(list).map(lambda x: (x[0], sum_arr(x[1])))
+    )
+
+
+def poly_sub(lhs: RDD, rhs: RDD) -> RDD:
+    def sub_arr(l: list):
+        assert len(l) > 0
+        r = l[0]
+        for i in range(1, len(l)):
+            r -= l[i]
+        return r
+
+    return (
+        lhs.union(rhs).groupByKey().mapValues(list).map(lambda x: (x[0], sub_arr(x[1])))
+    )
 
 
 def rdd_take_by_indexs(rdd: RDD, indexs: list):
@@ -334,58 +375,70 @@ def generate_domain(sc: SparkContext, g, size) -> RDD:  # domain: RDD[(i, X)]
     return result
 
 
-class RddPolynomial:
-    """
-    定义操作: +, -, *, /, ^
-    primitive_root, root_order用于计算 *, /
-    """
+# class RddPolynomial:
+#     """
+#     定义操作: +, -, *, /, ^
+#     primitive_root, root_order用于计算 *, /
+#     """
 
-    def __init__(self, rdd: RDD, primitive_root, root_order):
-        assert primitive_root ^ root_order == primitive_root.field.one()
-        self.rdd = rdd
-        self.primitive_root = primitive_root
-        self.root_order = root_order
+#     def __init__(self, rdd: RDD, primitive_root, root_order):
+#         assert primitive_root ^ root_order == primitive_root.field.one()
+#         self.rdd = rdd
+#         self.primitive_root = primitive_root
+#         self.root_order = root_order
 
-    def __neg__(self):
-        return RddPolynomial(self.rdd.map(lambda x: (x[0], -x[1])))
+#     def __neg__(self):
+#         return RddPolynomial(
+#             self.rdd.map(lambda x: (x[0], -x[1])), self.primitive_root, self.root_order
+#         )
 
-    def __add__(self, other):
-        def sum_arr(l: list):
-            assert len(l) > 0
-            sum = l[0]
-            for i in range(1, len(l)):
-                sum += l[i]
-            return sum
+#     def __add__(self, other):
+#         def sum_arr(l: list):
+#             assert len(l) > 0
+#             sum = l[0]
+#             for i in range(1, len(l)):
+#                 sum += l[i]
+#             return sum
 
-        return RddPolynomial(
-            self.rdd.union(other)
-            .groupByKey()
-            .mapValues(list)
-            .map(lambda x: (x[0], sum_arr(x[1])))
-        )
+#         return RddPolynomial(
+#             self.rdd.union(other)
+#             .groupByKey()
+#             .mapValues(list)
+#             .map(lambda x: (x[0], sum_arr(x[1]))),
+#             self.primitive_root,
+#             self.root_order,
+#         )
 
-    def __sub__(self, other):
-        return self.__add__(-other)
+#     def __sub__(self, other):
+#         return self.__add__(-other)
 
-    def __mul__(self, other):
-        return RddPolynomial(
-            rdd_fast_multiply(self.rdd, other, self.primitive_root, self.root_order)
-        )
+#     def __mul__(self, other):  # other是一个值, 不是一个多项式
+#         val = other.rdd.first()[1]
+#         rdd = self.rdd.map(lambda x: (x[0], val * x[1]))
+#         return RddPolynomial(
+#             rdd,
+#             self.primitive_root,
+#             self.root_order,
+#         )
 
-    def __truediv__(self, other):
-        return RddPolynomial(
-            rdd_fast_coset_divide(self.rdd, other, self.primitive_root, self.root_order)
-        )
+#     def __truediv__(self, other):
+#         return RddPolynomial(
+#             rdd_fast_coset_divide(
+#                 self.rdd, other, self.primitive_root, self.root_order
+#             ),
+#             self.primitive_root,
+#             self.root_order,
+#         )
 
-    def __xor__(self, exponent):
-        one = self.rdd.context.parallelize([(0, self.primitive_root.field.one())])
-        if exponent == 0:
-            return one
-        acc = one
-        for i in reversed(range(len(bin(exponent)[2:]))):
-            acc = rdd_fast_multiply(acc, acc, self.primitive_root, self.root_order)
-            if (1 << i) & exponent != 0:
-                acc = rdd_fast_multiply(
-                    acc, self.rdd, self.primitive_root, self.root_order
-                )
-        return acc
+#     def __xor__(self, exponent):
+#         one = self.rdd.context.parallelize([(0, self.primitive_root.field.one())])
+#         if exponent == 0:
+#             return one
+#         acc = one
+#         for i in reversed(range(len(bin(exponent)[2:]))):
+#             acc = rdd_fast_multiply(acc, acc, self.primitive_root, self.root_order)
+#             if (1 << i) & exponent != 0:
+#                 acc = rdd_fast_multiply(
+#                     acc, self.rdd, self.primitive_root, self.root_order
+#                 )
+#         return RddPolynomial(acc, self.primitive_root, self.root_order)

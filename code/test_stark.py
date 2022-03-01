@@ -4,7 +4,8 @@ from base.multivariate import *
 from rescue_prime import *
 from base.fri import *
 from base.ip import *
-from stark import *
+from base.stark import *
+import os
 
 
 def test_stark():

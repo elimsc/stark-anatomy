@@ -154,14 +154,14 @@ class FastStark:
         self,
         trace,
         round_constants_polys,
-        transition_constraints_f,
+        transition_constraints,
         boundary,
         transition_zerofier,
         transition_zerofier_codeword,
         proof_stream=None,
     ):
         def get_transition_polynomials(cur_state, next_state):
-            return transition_constraints_f(
+            return transition_constraints(
                 cur_state, next_state, round_constants_polys, lambda x: Polynomial([x])
             )
 
@@ -255,8 +255,7 @@ class FastStark:
         #     a.evaluate_symbolic(point) for a in transition_constraints
         # ]
         transition_polynomials = get_transition_polynomials(
-            trace_polynomials,
-            [tp.scale(self.omicron) for tp in trace_polynomials],
+            trace_polynomials, [tp.scale(self.omicron) for tp in trace_polynomials]
         )
 
         print("finished", time() - start)
@@ -315,14 +314,18 @@ class FastStark:
         max_degree = self.ce_domain_length - 1
         terms = []
         terms += [randomizer_polynomial]
+        self.transition_quotients_degree = []
         for i in range(len(transition_quotients)):
             terms += [transition_quotients[i]]
-            shift = max_degree - transition_quotients[i].degree()
+            self.transition_quotients_degree += [transition_quotients[i].degree()]
+            shift = max_degree - self.transition_quotients_degree[i]
             # 多项式的最大阶都变为 max_degree
             terms += [(x ^ shift) * transition_quotients[i]]
+        self.boundary_quotients_degree = []
         for i in range(self.num_registers):
             terms += [boundary_quotients[i]]
-            shift = max_degree - boundary_quotients[i].degree()
+            self.boundary_quotients_degree += [boundary_quotients[i].degree()]
+            shift = max_degree - self.boundary_quotients_degree[i]
             # 多项式的最大阶都变为 max_degree
             terms += [(x ^ shift) * boundary_quotients[i]]
 
@@ -408,26 +411,23 @@ class FastStark:
     def verify(
         self,
         proof,
-        transition_constraints,
         round_constants_polys,
-        transition_constaints_evaluate,
+        transition_constaints,
         boundary,
         transition_zerofier_root,
         proof_stream=None,
     ):
-        H = sha256
-
         def eval_transition_constraints(point, cur_state, next_state):
             round_constants_vals = []
             for poly_list in round_constants_polys:
                 round_constants_vals += [[poly.evaluate(point) for poly in poly_list]]
-            return transition_constaints_evaluate(
+            return transition_constaints(
                 cur_state, next_state, round_constants_vals, lambda x: x
             )
 
         # infer trace length from boundary conditions
-        original_trace_length = 1 + max(c for c, r, v in boundary)
-        randomized_trace_length = original_trace_length + self.num_randomizers
+        # original_trace_length = 1 + max(c for c, r, v in boundary)
+        # randomized_trace_length = original_trace_length + self.num_randomizers
 
         # deserialize with right proof stream
         if proof_stream == None:
@@ -444,9 +444,7 @@ class FastStark:
 
         # get weights for nonlinear combination
         weights = self.sample_weights(
-            1
-            + 2 * len(transition_constraints)
-            + 2 * len(self.boundary_interpolants(boundary)),
+            1 + 2 * self.num_registers + 2 * len(self.boundary_interpolants(boundary)),
             proof_stream.verifier_fiat_shamir(),
         )
 
@@ -538,6 +536,7 @@ class FastStark:
             # compute nonlinear combination
             counter = 0
             terms = []
+            max_degree = self.ce_domain_length - 1
             terms += [randomizer[current_index]]
             for s in range(
                 len(transition_constraints_values)
@@ -545,20 +544,12 @@ class FastStark:
                 tcv = transition_constraints_values[s]
                 quotient = tcv / transition_zerofier[current_index]
                 terms += [quotient]
-                shift = (
-                    self.max_degree(transition_constraints)
-                    - self.transition_quotient_degree_bounds(transition_constraints)[s]
-                )
+                shift = max_degree - self.transition_quotients_degree[s]
                 terms += [quotient * (domain_current_index ^ shift)]
             for s in range(self.num_registers):  # 求阶对齐后的 boundary quotient
                 bqv = leafs[s][current_index]  # boundary quotient value
                 terms += [bqv]
-                shift = (
-                    self.max_degree(transition_constraints)
-                    - self.boundary_quotient_degree_bounds(
-                        randomized_trace_length, boundary
-                    )[s]
-                )
+                shift = max_degree - self.boundary_quotients_degree[s]
                 terms += [bqv * (domain_current_index ^ shift)]
             # 根据上面的randomizer值, transition_quotient值, boundary_quotient值, 求出组合多项式的值
             combination = reduce(

@@ -22,6 +22,7 @@ data_arr = [(i, urandom(int(urandom(1)[0]))) for i in range(n)]
 
 def test_rdd_merkle():
     sc = SparkContext(conf=conf)
+    sc.setLogLevel("WARN")
     rdd_arr = sc.parallelize(data_arr)
 
     print("rdd build tree")

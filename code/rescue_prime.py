@@ -5,6 +5,7 @@ from base.algebra import *
 from base.univariate import *
 from base.multivariate import *
 from base.ntt import intt
+from rdd.rdd_poly import poly_add, poly_exp, poly_mul_constant, poly_sub
 
 
 class RescuePrime:
@@ -291,9 +292,11 @@ class RescuePrime:
 
     def rdd_transition_constaints(
         self,
-        prev_state: list[RDD],
-        next_state: list[RDD],
+        prev_state: list,  # list[RDD]
+        next_state: list,  # list[RDD]
         round_constants: list,  # list[list[RDD]]
+        primitive_root,
+        root_order,
     ):
         first_step_constants = round_constants[0]
         second_step_constants = round_constants[1]
@@ -301,25 +304,42 @@ class RescuePrime:
         for i in range(self.m):
             # compute left hand side symbolically
             # lhs = sum(MPolynomial.constant(self.MDS[i][k]) * (previous_state[k]^self.alpha) for k in range(self.m)) + first_step_constants[i]
-            lhs = Polynomial([])
+            lhs = None
             for k in range(self.m):
-                lhs += Polynomial([self.MDS[i][k]]) * (prev_state[k] ^ self.alpha)
-            lhs += first_step_constants[i]
+                if not lhs:
+                    temp = poly_exp(
+                        prev_state[k], self.alpha, primitive_root, root_order
+                    )
+                    temp = poly_mul_constant(temp, self.MDS[i][k])
+                    lhs = temp
+                else:
+                    temp = poly_exp(
+                        prev_state[k], self.alpha, primitive_root, root_order
+                    )
+                    temp = poly_mul_constant(temp, self.MDS[i][k])
+                    lhs = poly_add(lhs, temp)
+            lhs = poly_add(first_step_constants[i], lhs)
 
             # compute right hand side symbolically
             # rhs = sum(MPolynomial.constant(self.MDSinv[i][k]) * (next_state[k] - second_step_constants[k]) for k in range(self.m))^self.alpha
-            rhs = Polynomial([])
+            rhs = None
             for k in range(self.m):
-                rhs += Polynomial([self.MDSinv[i][k]]) * (
-                    next_state[k] - second_step_constants[k]
-                )
-            rhs = rhs ^ self.alpha
+                if not rhs:
+                    temp = poly_sub(next_state[k], second_step_constants[k])
+                    temp = poly_mul_constant(temp, self.MDSinv[i][k])
+                    rhs = temp
+
+                else:
+                    temp = poly_sub(next_state[k], second_step_constants[k])
+                    temp = poly_mul_constant(temp, self.MDSinv[i][k])
+                    rhs = poly_add(rhs, temp)
+            rhs = poly_exp(rhs, self.alpha, primitive_root, root_order)
 
             # equate left and right hand sides
-            air += [lhs - rhs]
+            air += [poly_sub(lhs, rhs)]
         return air
 
-    def trasition_constaints_evaluate(
+    def trasition_constaints(
         self, prev_state, next_state, round_constants, constant_val_fn
     ):
         zero = self.field.zero()
@@ -343,82 +363,6 @@ class RescuePrime:
 
             air += [lhs - rhs]
 
-        return air
-
-    def transition_constaints_f(
-        self,
-        prev_state: list,
-        next_state: list,
-        round_constants,
-        is_poly=True,
-    ):
-        if not is_poly:
-            prev_state = [Polynomial([v]) for v in prev_state]
-            next_state = [Polynomial([v]) for v in next_state]
-        first_step_constants = round_constants[0]
-        second_step_constants = round_constants[1]
-        if not is_poly:
-            first_step_constants = [Polynomial([v]) for v in first_step_constants]
-            second_step_constants = [Polynomial([v]) for v in second_step_constants]
-
-        air = []
-        for i in range(self.m):
-            # compute left hand side symbolically
-            # lhs = sum(MPolynomial.constant(self.MDS[i][k]) * (previous_state[k]^self.alpha) for k in range(self.m)) + first_step_constants[i]
-            lhs = Polynomial([])
-            for k in range(self.m):
-                lhs += Polynomial([self.MDS[i][k]]) * (prev_state[k] ^ self.alpha)
-            lhs += first_step_constants[i]
-
-            # compute right hand side symbolically
-            # rhs = sum(MPolynomial.constant(self.MDSinv[i][k]) * (next_state[k] - second_step_constants[k]) for k in range(self.m))^self.alpha
-            rhs = Polynomial([])
-            for k in range(self.m):
-                rhs += Polynomial([self.MDSinv[i][k]]) * (
-                    next_state[k] - second_step_constants[k]
-                )
-            rhs = rhs ^ self.alpha
-
-            # equate left and right hand sides
-            air += [lhs - rhs]
-        if is_poly:
-            return air
-        else:
-            return [poly.coefficients[0] for poly in air]
-
-    def transition_constraints(self, round_constants):
-        first_step_constants = round_constants[0]
-        second_step_constants = round_constants[1]
-
-        # arithmetize one round of Rescue-Prime
-        variables = MPolynomial.variables(1 + 2 * self.m, self.field)
-
-        # 这里的 previous_state 和 next_state 分别和 trace_polynomials 和 [tp.scale(self.omicron)] 对应
-        cycle_index = variables[0]
-        previous_state = variables[1 : (1 + self.m)]
-        next_state = variables[(1 + self.m) : (1 + 2 * self.m)]
-        air = []
-        for i in range(self.m):
-            # compute left hand side symbolically
-            # lhs = sum(MPolynomial.constant(self.MDS[i][k]) * (previous_state[k]^self.alpha) for k in range(self.m)) + first_step_constants[i]
-            lhs = MPolynomial.constant(self.field.zero())
-            for k in range(self.m):
-                lhs = lhs + MPolynomial.constant(self.MDS[i][k]) * (
-                    previous_state[k] ^ self.alpha
-                )
-            lhs = lhs + first_step_constants[i]
-
-            # compute right hand side symbolically
-            # rhs = sum(MPolynomial.constant(self.MDSinv[i][k]) * (next_state[k] - second_step_constants[k]) for k in range(self.m))^self.alpha
-            rhs = MPolynomial.constant(self.field.zero())
-            for k in range(self.m):
-                rhs = rhs + MPolynomial.constant(self.MDSinv[i][k]) * (
-                    next_state[k] - second_step_constants[k]
-                )
-            rhs = rhs ^ self.alpha
-
-            # equate left and right hand sides
-            air += [lhs - rhs]
         return air
 
     # def randomizer_freedom(self, omicron, num_randomizers):
