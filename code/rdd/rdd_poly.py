@@ -71,10 +71,11 @@ def rdd_ntt(
 
     log_n = int(math.log2(n))
     r = 2 ** (log_n // 2)
+    sc = values.context
 
     return (
         values.map(lambda x: (x[0] % r, (x[0] // r, x[1])))
-        .groupByKey(r)
+        .Key(sc.defaultParallelism * 2)  # r
         .persist(StorageLevel.MEMORY_AND_DISK)
         .mapValues(list)
         .flatMap(
@@ -89,7 +90,7 @@ def rdd_ntt(
             # k: x[0], i: x[1][0], v: x[1][1]
             lambda x: (x[1][0], (x[0], x[1][1] * (primitive_root ^ (x[0] * x[1][0]))))
         )
-        .groupByKey(n // r)
+        .groupByKey(sc.defaultParallelism * 2)  # n // r
         .persist(StorageLevel.MEMORY_AND_DISK)
         .mapValues(list)
         .flatMap(
@@ -256,7 +257,7 @@ def poly_append_zero(poly: RDD, start, zero_count: int) -> RDD:
     zero = Field.main().zero()
     sc = poly.context
     poly = poly.union(sc.parallelize([(start + i, zero) for i in range(zero_count)]))
-    return poly
+    return poly.persist(StorageLevel.MEMORY_AND_DISK)
 
 
 def poly_mul_x(poly: RDD, n) -> RDD:
@@ -264,7 +265,7 @@ def poly_mul_x(poly: RDD, n) -> RDD:
     sc = poly.context
     poly = poly.map(lambda x: (x[0] + n, x[1]))
     poly = sc.parallelize([i, zero] for i in range(n)).union(poly)
-    return poly
+    return poly.persist(StorageLevel.MEMORY_AND_DISK)
 
 
 # a * poly1 + b * poly2
@@ -293,11 +294,13 @@ def poly_sub_list(lhs: RDD, rhs: list) -> RDD:
             return (x[0], x[1] - rhs[x[0]])
         return x
 
-    return lhs.map(lambda x: sub(x, rhs))
+    return lhs.map(lambda x: sub(x, rhs)).persist(StorageLevel.MEMORY_AND_DISK)
 
 
 def poly_mul_constant(lhs: RDD, constant) -> RDD:
-    return lhs.map(lambda x: (x[0], x[1] * constant))
+    return lhs.map(lambda x: (x[0], x[1] * constant)).persist(
+        StorageLevel.MEMORY_AND_DISK
+    )
 
 
 def poly_exp(rdd: RDD, exponent, primitive_root, root_order) -> RDD:
@@ -310,7 +313,7 @@ def poly_exp(rdd: RDD, exponent, primitive_root, root_order) -> RDD:
         acc = rdd_fast_multiply(acc, acc, primitive_root, root_order)
         if (1 << i) & exponent != 0:
             acc = rdd_fast_multiply(acc, rdd, primitive_root, root_order)
-    return acc
+    return acc.persist(StorageLevel.MEMORY_AND_DISK)
 
 
 def poly_add(lhs: RDD, rhs: RDD) -> RDD:
@@ -321,8 +324,13 @@ def poly_add(lhs: RDD, rhs: RDD) -> RDD:
             sum += l[i]
         return sum
 
+    sc = lhs.context
     return (
-        lhs.union(rhs).groupByKey().mapValues(list).map(lambda x: (x[0], sum_arr(x[1])))
+        lhs.union(rhs)
+        .groupByKey(sc.defaultParallelism * 2)
+        .mapValues(list)
+        .map(lambda x: (x[0], sum_arr(x[1])))
+        .persist(StorageLevel.MEMORY_AND_DISK)
     )
 
 
@@ -334,8 +342,13 @@ def poly_sub(lhs: RDD, rhs: RDD) -> RDD:
             r -= l[i]
         return r
 
+    sc = lhs.context
     return (
-        lhs.union(rhs).groupByKey().mapValues(list).map(lambda x: (x[0], sub_arr(x[1])))
+        lhs.union(rhs)
+        .groupByKey(sc.defaultParallelism * 2)
+        .mapValues(list)
+        .map(lambda x: (x[0], sub_arr(x[1])))
+        .persist(StorageLevel.MEMORY_AND_DISK)
     )
 
 

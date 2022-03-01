@@ -1,4 +1,4 @@
-from hashlib import shake_256
+from hashlib import sha256
 import pickle as pickle  # serialization
 
 
@@ -22,12 +22,12 @@ class ProofStream:
         return pickle.dumps(self.objects)
 
     def prover_fiat_shamir(self, num_bytes=32):
-        return shake_256(self.serialize()).digest(num_bytes)
+        # shake_256
+        # return sha256(self.serialize()).digest(num_bytes)
+        return sha256(self.serialize()).digest()
 
     def verifier_fiat_shamir(self, num_bytes=32):
-        return shake_256(pickle.dumps(self.objects[: self.read_index])).digest(
-            num_bytes
-        )
+        return sha256(pickle.dumps(self.objects[: self.read_index])).digest()
 
     def deserialize(self, bb):
         ps = ProofStream()

@@ -54,9 +54,7 @@ class Fri:
 
     def sample_indices(self, seed, size, reduced_size, number):
         # reduced_size 为最后一层的点的个数
-        assert (
-            number <= reduced_size
-        ), f"cannot sample more indices than available in last codeword; requested: {number}, available: {reduced_size}"
+        assert number <= reduced_size
         assert (
             number <= 2 * reduced_size
         ), "not enough entropy in indices wrt last codeword"

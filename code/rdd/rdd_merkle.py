@@ -58,7 +58,7 @@ def merkle_root(tree: RDD):
 
 def merkle_build(data_array: RDD, n) -> RDD:
     sc = data_array.context
-    if n <= (1 << 15):
+    if n <= (1 << 13):
         return sc.parallelize(
             [(0, 0)]
             + _merkle_build0(data_array.map(lambda x: (x[0] + n, x[1])).collect())
