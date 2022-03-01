@@ -58,7 +58,7 @@ def merkle_root(tree: RDD):
 
 def merkle_build(data_array: RDD, n) -> RDD:
     sc = data_array.context
-    if n <= 1024:
+    if n <= (1 << 15):
         return sc.parallelize(
             [(0, 0)]
             + _merkle_build0(data_array.map(lambda x: (x[0] + n, x[1])).collect())
@@ -67,7 +67,8 @@ def merkle_build(data_array: RDD, n) -> RDD:
     # n = data_array.count()
     assert n & (n - 1) == 0, "must power of two"
     logn = int(math.log2(n))
-    r = data_array.getNumPartitions()  # r个分区
+    # r = data_array.getNumPartitions()  # r个分区
+    r = sc.defaultParallelism
     r = next_power_two(r)
     if 4 * r < n:
         r = 2 * r
