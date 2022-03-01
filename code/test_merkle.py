@@ -74,7 +74,7 @@ def test_rdd_merkle():
     for i in range(n):
         path = Merkle.open(i, data_array)
         path1 = merkle1.open(i)
-        path2 = merkle_open(i, rdd_tree)
+        path2 = merkle_open(i, rdd_tree, 2 * n)
         assert path == path1
         assert path == path2
         assert Merkle.verify(root, i, path, data_array[i])

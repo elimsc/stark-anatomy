@@ -104,18 +104,24 @@ class FastStark:
         )
 
     def preprocess(self):
+        # TODO: 这里是否需要实现个 rdd_fast_zerofier
         transition_zerofier = fast_zerofier(
             self.omicron_domain[: (self.original_trace_length - 1)],
             self.omicron,
             self.omicron_domain_length,
         )
-        transition_zerofier_codeword = fast_coset_evaluate(
+        transition_zerofier = rdd_from_poly(self.sc, transition_zerofier)
+        transition_zerofier_codeword = rdd_fast_coset_evaluate(
             transition_zerofier, self.generator, self.omega, self.fri.domain_length
         )
-        transition_zerofier_root = Merkle.commit(transition_zerofier_codeword)
+        transition_zerofier_tree = merkle_build(
+            transition_zerofier_codeword, self.fri_domain_length
+        )
+        transition_zerofier_root = merkle_root(transition_zerofier_tree)
         return (
             transition_zerofier,
             transition_zerofier_codeword,
+            transition_zerofier_tree,
             transition_zerofier_root,
         )
 
@@ -180,14 +186,16 @@ class FastStark:
         boundary,
         transition_zerofier,
         transition_zerofier_codeword,
+        transition_zerofier_tree,
         proof_stream=None,
     ):
+        rdd_round_constants_polys = []
+        for i in range(len(round_constants_polys)):
+            rdd_round_constants_polys += [
+                [rdd_from_poly(self.sc, t) for t in round_constants_polys[i]]
+            ]
+
         def get_transition_polynomials(cur_state, next_state):
-            rdd_round_constants_polys = []
-            for i in range(len(round_constants_polys)):
-                rdd_round_constants_polys += [
-                    [rdd_from_poly(self.sc, t) for t in round_constants_polys[i]]
-                ]
             return transition_constraints(
                 cur_state,
                 next_state,
@@ -229,6 +237,7 @@ class FastStark:
             trace_polynomials = trace_polynomials + [
                 rdd_intt(
                     self.omicron,
+                    self.omicron_domain_length,
                     FieldElement(self.omicron_domain_length, self.field).inverse(),
                     single_trace,
                 )
@@ -312,7 +321,7 @@ class FastStark:
         transition_quotients = [
             rdd_fast_coset_divide(
                 tp,
-                rdd_from_poly(self.sc, transition_zerofier),
+                transition_zerofier,
                 self.generator,
                 self.ce_root,
                 self.ce_domain_length,
@@ -324,10 +333,12 @@ class FastStark:
         # commit to randomizer polynomial
         print("commit to randomizer polynomial")
         start = time()
-        randomizer_polynomial = Polynomial(
-            [self.field.sample(os.urandom(17)) for i in range(self.ce_domain_length)]
+        randomizer_polynomial = self.sc.parallelize(
+            [
+                (i, self.field.sample(os.urandom(17)))
+                for i in range(self.ce_domain_length)
+            ]
         )
-        randomizer_polynomial = rdd_from_poly(self.sc, randomizer_polynomial)
         # randomizer_codeword = fast_coset_evaluate(
         #     randomizer_polynomial, self.generator, self.omega, self.fri_domain_length
         # )
@@ -436,7 +447,9 @@ class FastStark:
             )
             for i in quadrupled_indices:
                 proof_stream.push(needed_codeword[i])
-                path = merkle_open(i, boundary_quotient_trees[j])
+                path = merkle_open(
+                    i, boundary_quotient_trees[j], self.fri_domain_length * 2
+                )
                 proof_stream.push(path)
         print("finished", time() - start)
 
@@ -446,16 +459,19 @@ class FastStark:
         needed_codeword = rdd_take_by_indexs(randomizer_codeword, quadrupled_indices)
         for i in quadrupled_indices:
             proof_stream.push(needed_codeword[i])
-            path = merkle_open(i, randomizer_tree)
+            path = merkle_open(i, randomizer_tree, self.fri_domain_length * 2)
             proof_stream.push(path)
         print("finished", time() - start)
 
         # ... and also in the zerofier!
         print("open indicated positions in the transition_zerofier_codeword")
         start = time()
+        needed_codeword = rdd_take_by_indexs(
+            transition_zerofier_codeword, quadrupled_indices
+        )
         for i in quadrupled_indices:
-            proof_stream.push(transition_zerofier_codeword[i])
-            path = Merkle.open(i, transition_zerofier_codeword)
+            proof_stream.push(needed_codeword[i])
+            path = merkle_open(i, transition_zerofier_tree, self.fri_domain_length * 2)
             proof_stream.push(path)
         print("finished", time() - start)
 

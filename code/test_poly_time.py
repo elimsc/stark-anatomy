@@ -41,7 +41,7 @@ def test_rdd_ntt():
     rdd_arr = sc.parallelize(arr)
     print("test rdd ntt")
     start = time()
-    values1 = rdd_ntt(primitive_root, rdd_arr)
+    values1 = rdd_ntt(primitive_root, n, rdd_arr)
     print("finished. ", time() - start)
     sc.stop()
 

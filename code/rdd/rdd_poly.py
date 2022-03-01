@@ -59,8 +59,11 @@ def ntt1(primitive_root, values):
     return cur_layer[0]
 
 
-def rdd_ntt(primitive_root, values: RDD) -> RDD:  # values: RDD[(index,value)]
-    n = values.count()
+def rdd_ntt(
+    primitive_root, root_order, values: RDD
+) -> RDD:  # values: RDD[(index,value)]
+    # n = values.count()
+    n = root_order
     assert n & (n - 1) == 0, "cannot compute intt of non-power-of-two sequence"
 
     if n == 1:
@@ -105,10 +108,11 @@ def rdd_ntt(primitive_root, values: RDD) -> RDD:  # values: RDD[(index,value)]
 
 def rdd_intt(
     primitive_root,
+    root_order,
     ninv,
     values: RDD,
 ) -> RDD:
-    transformed_values = rdd_ntt(primitive_root.inverse(), values)
+    transformed_values = rdd_ntt(primitive_root.inverse(), root_order, values)
     return transformed_values.map(lambda x: (x[0], x[1] * ninv)).persist(
         StorageLevel.MEMORY_AND_DISK
     )
@@ -119,6 +123,7 @@ def rdd_fast_coset_evaluate(polynomial: RDD, offset, generator, order):
     cur_len = scaled_polynomial.count()
     values = rdd_ntt(
         generator,
+        order,
         poly_append_zero(scaled_polynomial, cur_len, order - cur_len),
     )
     return values.persist(StorageLevel.MEMORY_AND_DISK)
@@ -164,46 +169,17 @@ def rdd_fast_multiply(lhs: RDD, rhs: RDD, primitive_root, root_order) -> RDD:
 
     # print("lhs, rhs, order", lhs.count(), rhs.count(), order)
 
-    lhs_codeword = rdd_ntt(root, lhs)
-    rhs_codeword = rdd_ntt(root, rhs)
+    lhs_codeword = rdd_ntt(root, order, lhs)
+    rhs_codeword = rdd_ntt(root, order, rhs)
 
     hadamard_product = lhs_codeword.zip(rhs_codeword).map(
         lambda x: (x[0][0], x[0][1] * x[1][1])
     )
-    product_coefficients = rdd_intt(root, ninv, hadamard_product)
+    product_coefficients = rdd_intt(root, order, ninv, hadamard_product)
 
     return product_coefficients.filter(lambda x: x[0] <= degree).persist(
         StorageLevel.MEMORY_AND_DISK
     )
-
-
-def rdd_fast_zerofier(domain: RDD, primitive_root, root_order) -> RDD:
-    assert (
-        primitive_root ^ root_order == primitive_root.field.one()
-    ), "supplied root does not have supplied order"
-    assert (
-        primitive_root ^ (root_order // 2) != primitive_root.field.one()
-    ), "supplied root is not primitive root of supplied order"
-
-    n = domain.count()
-    sc = domain.context
-
-    if n == 0:
-        return sc.parallelize([])
-
-    if n == 1:
-        return sc.parallelize(
-            [(0, -domain.take(1)[0][1]), (1, primitive_root.field.one())]
-        )
-
-    half = n // 2
-
-    left_half_domain = domain.filter(lambda x: x[0] < half)
-    right_half_domain = domain.filter(lambda x: x[0] >= half)
-
-    left = rdd_fast_zerofier(left_half_domain, primitive_root, root_order)
-    right = rdd_fast_zerofier(right_half_domain, primitive_root, root_order)
-    return rdd_fast_multiply(left, right, primitive_root, root_order)
 
 
 # lhs, rhs 为RDD，输出为RDD
@@ -245,15 +221,15 @@ def rdd_fast_coset_divide(
     scaled_lhs = poly_append_zero(scaled_lhs, lhs_degree + 1, order - (lhs_degree + 1))
     scaled_rhs = poly_append_zero(scaled_rhs, rhs_degree + 1, order - (rhs_degree + 1))
 
-    lhs_codeword = rdd_ntt(root, scaled_lhs)
-    rhs_codeword = rdd_ntt(root, scaled_rhs)
+    lhs_codeword = rdd_ntt(root, order, scaled_lhs)
+    rhs_codeword = rdd_ntt(root, order, scaled_rhs)
 
     quotient_codeword = lhs_codeword.zip(rhs_codeword).map(
         lambda x: (x[0][0], x[0][1] / x[1][1])
     )
 
     ninv = FieldElement(order, root.field).inverse()
-    scaled_quotient = rdd_intt(root, ninv, quotient_codeword)
+    scaled_quotient = rdd_intt(root, order, ninv, quotient_codeword)
     scaled_quotient = scaled_quotient.filter(
         lambda x: x[0] <= (lhs_degree - rhs_degree)
     )

@@ -195,6 +195,7 @@ def test_rdd_fast_stark():
         (
             transition_zerofier,
             transition_zerofier_codeword,
+            transition_zerofier_tree,
             transition_zerofier_root,
         ) = stark.preprocess()
 
@@ -227,6 +228,7 @@ def test_rdd_fast_stark():
             boundary,
             transition_zerofier,
             transition_zerofier_codeword,
+            transition_zerofier_tree,
         )
         print("prove time:", time() - start)
 

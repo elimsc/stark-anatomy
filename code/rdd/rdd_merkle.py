@@ -36,8 +36,8 @@ def merkle_build_temp(data_array: RDD) -> RDD:
     return tree_nodes.sortByKey()
 
 
-def merkle_open(index, tree: RDD) -> list:  # tree: RDD[(index, value)]
-    num_nodes = tree.count()
+def merkle_open(index, tree: RDD, num_nodes) -> list:  # tree: RDD[(index, value)]
+    # num_nodes = tree.count()
     assert num_nodes & (num_nodes - 1) == 0, "must power of two"
     real_index = num_nodes // 2 + index
     path_indexes = []

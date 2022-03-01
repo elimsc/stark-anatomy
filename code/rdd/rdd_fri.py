@@ -188,9 +188,15 @@ class RddFri:
 
         # reveal authentication paths
         for s in range(self.num_colinearity_tests):
-            path_a = merkle_open(a_indices[s], cur_merkle_tree)
-            path_b = merkle_open(b_indices[s], cur_merkle_tree)
-            path_c = merkle_open(c_indices[s], next_merkle_tree)
+            path_a = merkle_open(
+                a_indices[s], cur_merkle_tree, 2 * current_codeword_length
+            )
+            path_b = merkle_open(
+                b_indices[s], cur_merkle_tree, 2 * current_codeword_length
+            )
+            path_c = merkle_open(
+                c_indices[s], next_merkle_tree, current_codeword_length
+            )
             proof_stream.push(path_a)
             proof_stream.push(path_b)
             proof_stream.push(path_c)

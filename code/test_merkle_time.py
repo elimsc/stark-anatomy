@@ -5,7 +5,6 @@ from time import time
 from rdd.rdd_merkle import (
     Merkle,
     merkle_build,
-    merkle_open,
     _merkle_build0,
     merkle_build_temp,
 )
