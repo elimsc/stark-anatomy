@@ -1,15 +1,14 @@
-from logging import root
-from algebra import *
-from merkle import *
-from ip import *
-from ntt import *
+from base.algebra import *
+from base.merkle import *
+from base.ip import *
+from base.ntt import *
 from binascii import hexlify, unhexlify
 import math
-from hashlib import blake2b
+from hashlib import sha256
 
-from univariate import *
-from util import *
-from rdd_merkle import Merkle as Merkle1
+from base.univariate import *
+from base.util import *
+from rdd.rdd_merkle import Merkle as Merkle1
 
 
 class Fri:
@@ -66,7 +65,7 @@ class Fri:
         reduced_indices = []
         counter = 0
         while len(indices) < number:
-            index = Fri.sample_index(blake2b(seed + bytes(counter)).digest(), size)
+            index = Fri.sample_index(sha256(seed + bytes(counter)).digest(), size)
             reduced_index = index % reduced_size
             counter += 1
             if reduced_index not in reduced_indices:

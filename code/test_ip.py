@@ -1,4 +1,4 @@
-from ip import *
+from base.ip import *
 
 
 def test_serialize():
@@ -9,7 +9,7 @@ def test_serialize():
     proof1.push(2)
 
     serialized = proof1.serialize()
-    proof2 = ProofStream.deserialize(serialized)
+    proof2 = proof1.deserialize(serialized)
 
     assert proof1.pull() == proof2.pull(), "pulled object 0 don't match"
     assert proof1.pull() == proof2.pull(), "pulled object 1 don't match"
@@ -19,3 +19,6 @@ def test_serialize():
     assert (
         proof1.prover_fiat_shamir() == proof2.prover_fiat_shamir()
     ), "fiat shamir is not the same"
+
+
+test_serialize()

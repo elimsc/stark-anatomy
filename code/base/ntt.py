@@ -1,4 +1,4 @@
-from univariate import *
+from base.univariate import *
 
 
 def ntt(primitive_root, values):
@@ -82,6 +82,15 @@ def fast_multiply(
 
     product_coefficients = intt(root, hadamard_product)
     return Polynomial(product_coefficients[0 : (degree + 1)])
+
+
+def fast_exp(poly, exponent, primitive_root, root_order):
+    acc = Polynomial([primitive_root.field.one()])
+    for i in reversed(range(len(bin(exponent)[2:]))):
+        acc = fast_multiply(acc, acc, primitive_root, root_order)
+        if (1 << i) & exponent != 0:
+            acc = fast_multiply(acc, poly, primitive_root, root_order)
+    return acc
 
 
 def fast_zerofier(domain, primitive_root, root_order):

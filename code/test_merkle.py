@@ -1,7 +1,8 @@
-from merkle import Merkle
+from pyspark import SparkContext
+from base.merkle import Merkle
 from os import urandom
-from rdd_merkle import Merkle as Merkle1, merkle_root
-from rdd_merkle import merkle_build, merkle_open
+from rdd.rdd_merkle import Merkle as Merkle1, merkle_root
+from rdd.rdd_merkle import merkle_build, merkle_open, _merkle_build0
 
 
 def test_merkle():
@@ -51,9 +52,7 @@ def test_merkle():
         assert False == Merkle.verify_(fake_root, i, path, leafs[i])
 
 
-from test_spark import get_sc
-
-sc = get_sc("test_rdd_merkle")
+sc = SparkContext()
 
 
 def test_rdd_merkle():
@@ -61,8 +60,11 @@ def test_rdd_merkle():
 
     data_array = [urandom(int(urandom(1)[0])) for i in range(n)]
     merkle1 = Merkle1(data_array)
+    merkle2 = _merkle_build0([(i + n, data_array[i]) for i in range(n)])
+
+    assert list(enumerate(merkle1.nodes))[1:] == merkle2
     rdd_arr = sc.parallelize(list(enumerate(data_array)))
-    rdd_tree = merkle_build(rdd_arr)
+    rdd_tree = merkle_build(rdd_arr, n)
 
     root = Merkle.commit(data_array)
     assert root == merkle1.root()
@@ -79,6 +81,6 @@ def test_rdd_merkle():
         assert Merkle1.verify(root, i, path, data_array[i])
 
 
-test_merkle()
+# test_merkle()
 test_rdd_merkle()
 sc.stop()

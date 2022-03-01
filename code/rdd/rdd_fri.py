@@ -1,15 +1,15 @@
 from pyspark import RDD
-from algebra import *
-from merkle import *
-from ip import *
-from ntt import *
+from base.algebra import *
+from base.merkle import *
+from base.ip import *
+from base.ntt import *
 from binascii import hexlify, unhexlify
 import math
-from hashlib import blake2b
+from hashlib import sha256
 
-from univariate import *
-from util import *
-from rdd_merkle import merkle_build, merkle_open, merkle_root
+from base.univariate import *
+from base.util import *
+from rdd.rdd_merkle import merkle_build, merkle_open, merkle_root
 
 
 class RddFri:
@@ -66,7 +66,7 @@ class RddFri:
         reduced_indices = []
         counter = 0
         while len(indices) < number:
-            index = RddFri.sample_index(blake2b(seed + bytes(counter)).digest(), size)
+            index = RddFri.sample_index(sha256(seed + bytes(counter)).digest(), size)
             reduced_index = index % reduced_size
             counter += 1
             if reduced_index not in reduced_indices:
@@ -100,7 +100,7 @@ class RddFri:
             ), "error in commit: omega does not have the right order!"
 
             # compute and send Merkle root
-            tree = merkle_build(codeword)
+            tree = merkle_build(codeword, N)
             merkle_trees += [tree]
             root = merkle_root(tree)
             proof_stream.push(root)

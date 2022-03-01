@@ -1,7 +1,8 @@
-from fri import *
-from univariate import *
-from multivariate import *
-from ntt import *
+from hashlib import sha256
+from base.fri import *
+from base.univariate import *
+from base.multivariate import *
+from base.ntt import *
 from functools import reduce
 import os
 from time import time
@@ -145,7 +146,7 @@ class FastStark:
 
     def sample_weights(self, number, randomness):
         return [
-            self.field.sample(blake2b(randomness + bytes(i)).digest())
+            self.field.sample(sha256(randomness + bytes(i)).digest())
             for i in range(0, number)
         ]
 
@@ -161,7 +162,7 @@ class FastStark:
     ):
         def get_transition_polynomials(cur_state, next_state):
             return transition_constraints_f(
-                cur_state, next_state, round_constants_polys
+                cur_state, next_state, round_constants_polys, lambda x: Polynomial([x])
             )
 
         # create proof stream object if necessary
@@ -409,19 +410,19 @@ class FastStark:
         proof,
         transition_constraints,
         round_constants_polys,
-        transition_constaints_f,
+        transition_constaints_evaluate,
         boundary,
         transition_zerofier_root,
         proof_stream=None,
     ):
-        H = blake2b
+        H = sha256
 
         def eval_transition_constraints(point, cur_state, next_state):
             round_constants_vals = []
             for poly_list in round_constants_polys:
                 round_constants_vals += [[poly.evaluate(point) for poly in poly_list]]
-            return transition_constaints_f(
-                cur_state, next_state, round_constants_vals, False
+            return transition_constaints_evaluate(
+                cur_state, next_state, round_constants_vals, lambda x: x
             )
 
         # infer trace length from boundary conditions

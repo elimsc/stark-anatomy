@@ -1,4 +1,4 @@
-from univariate import *
+from base.univariate import *
 import os
 
 
@@ -61,7 +61,7 @@ def test_interpolate():
     five = FieldElement(5, field)
 
     values = [five, two, two, one, five, zero]
-    domain = [FieldElement(i, field) for i in range(1, 6)]
+    domain = [FieldElement(i, field) for i in range(6)]
 
     poly = Polynomial.interpolate_domain(domain, values)
 
@@ -107,3 +107,9 @@ def test_zerofier():
         ), "zerofier evaluates to zero where it should not"
 
     print("univariate zerofier test success \\o/")
+
+
+test_zerofier()
+test_interpolate()
+test_distributivity()
+test_division()

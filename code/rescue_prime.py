@@ -1,8 +1,10 @@
 from time import time
-from algebra import *
-from univariate import *
-from multivariate import *
-from ntt import fast_interpolate, intt
+
+from pyspark import RDD
+from base.algebra import *
+from base.univariate import *
+from base.multivariate import *
+from base.ntt import intt
 
 
 class RescuePrime:
@@ -286,6 +288,62 @@ class RescuePrime:
             second_step_constants += [univariate]
 
         return first_step_constants, second_step_constants
+
+    def rdd_transition_constaints(
+        self,
+        prev_state: list[RDD],
+        next_state: list[RDD],
+        round_constants: list,  # list[list[RDD]]
+    ):
+        first_step_constants = round_constants[0]
+        second_step_constants = round_constants[1]
+        air = []
+        for i in range(self.m):
+            # compute left hand side symbolically
+            # lhs = sum(MPolynomial.constant(self.MDS[i][k]) * (previous_state[k]^self.alpha) for k in range(self.m)) + first_step_constants[i]
+            lhs = Polynomial([])
+            for k in range(self.m):
+                lhs += Polynomial([self.MDS[i][k]]) * (prev_state[k] ^ self.alpha)
+            lhs += first_step_constants[i]
+
+            # compute right hand side symbolically
+            # rhs = sum(MPolynomial.constant(self.MDSinv[i][k]) * (next_state[k] - second_step_constants[k]) for k in range(self.m))^self.alpha
+            rhs = Polynomial([])
+            for k in range(self.m):
+                rhs += Polynomial([self.MDSinv[i][k]]) * (
+                    next_state[k] - second_step_constants[k]
+                )
+            rhs = rhs ^ self.alpha
+
+            # equate left and right hand sides
+            air += [lhs - rhs]
+        return air
+
+    def trasition_constaints_evaluate(
+        self, prev_state, next_state, round_constants, constant_val_fn
+    ):
+        zero = self.field.zero()
+        first_step_constants = round_constants[0]
+        second_step_constants = round_constants[1]
+        air = []
+        for i in range(self.m):
+            lhs = constant_val_fn(zero)
+            for k in range(self.m):
+                lhs = lhs + (prev_state[k] ^ self.alpha) * constant_val_fn(
+                    self.MDS[i][k]
+                )
+            lhs = lhs + first_step_constants[i]
+
+            rhs = constant_val_fn(zero)
+            for k in range(self.m):
+                rhs += (next_state[k] - second_step_constants[k]) * constant_val_fn(
+                    self.MDSinv[i][k]
+                )
+            rhs = rhs ^ self.alpha
+
+            air += [lhs - rhs]
+
+        return air
 
     def transition_constaints_f(
         self,

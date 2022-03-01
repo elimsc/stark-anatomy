@@ -1,21 +1,22 @@
 from pyspark import RDD, SparkContext
-from fri import *
-from rdd_ntt import rdd_fast_coset_divide, rdd_fast_coset_evaluate
-from rdd_poly import (
+from rdd.rdd_fri import *
+from rdd.rdd_poly import (
+    rdd_fast_coset_divide,
+    rdd_fast_coset_evaluate,
     poly_append_zero,
     poly_combine_list,
     poly_mul_x,
     poly_sub_list,
     rdd_take_by_indexs,
 )
-from univariate import *
-from multivariate import *
-from ntt import *
+
+from base.univariate import *
+from base.multivariate import *
+from base.ntt import *
 from functools import reduce
 from rdd.rdd_merkle import merkle_build, merkle_open, merkle_root
 import os
 from time import time
-from rdd_fri import RddFri
 
 
 def next_power_two(n):

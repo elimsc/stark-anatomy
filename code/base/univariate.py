@@ -1,4 +1,4 @@
-from algebra import *
+from base.algebra import *
 
 
 class Polynomial:

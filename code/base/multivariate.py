@@ -1,4 +1,4 @@
-from univariate import *
+from base.univariate import *
 
 
 class MPolynomial:

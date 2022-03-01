@@ -2,6 +2,52 @@ from rescue_prime import *
 import os
 
 
+def next_power_two(n):
+    if n & (n - 1) == 0:
+        return n
+    return 1 << len(bin(n)[2:])
+
+
+f = Field.main()
+
+
+def field_list(l):
+    return [FieldElement(v, f) for (_, v) in enumerate(l)]
+
+
+def test_trainsition_constraints():
+    rp = RescuePrime()
+    domain_length = next_power_two(rp.N)
+    primitive_root = rp.field.primitive_nth_root(domain_length)
+    round_constants_poly = rp.round_constants_polynomials(primitive_root, domain_length)
+    prev_poly = [Polynomial(field_list([0, 0, 1])), Polynomial(field_list([0, 0, 2]))]
+    next_poly = [
+        Polynomial(field_list([0, 0, 0, 1])),
+        Polynomial(field_list([0, 0, 0, 2])),
+    ]
+    x = FieldElement(3, f)
+    prev_val = [poly.evaluate(x) for poly in prev_poly]
+    next_val = [poly.evaluate(x) for poly in next_poly]
+    round_constants_val = []
+    round_constants_val += [[poly.evaluate(x) for poly in round_constants_poly[0]]]
+    round_constants_val += [[poly.evaluate(x) for poly in round_constants_poly[1]]]
+
+    # 直接带入求
+    transition_val = rp.transition_constaints_f(
+        prev_val, next_val, round_constants_val, False
+    )
+
+    # 先求多项式，再求值
+    transition_poly = rp.transition_constaints_f(
+        prev_poly, next_poly, round_constants_poly
+    )
+    transition_val1 = [poly.evaluate(x) for poly in transition_poly]
+    assert transition_val == transition_val1
+
+
+test_trainsition_constraints()
+
+
 def test_rescue_prime():
     rp = RescuePrime()
 

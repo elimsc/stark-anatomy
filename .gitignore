@@ -1,2 +1,7 @@
-docs/_site/*
-docs/_site/
+__pycache__/
+*.swp
+*.zip
+*.sh
+*.csv
+./spark1/**
+**.DS_Store

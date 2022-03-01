@@ -1,8 +1,8 @@
-from hashlib import blake2b
+from hashlib import sha256
 
 
 class Merkle:
-    H = blake2b
+    H = sha256
 
     def commit_(leafs):
         assert len(leafs) & (len(leafs) - 1) == 0, "length must be power of two"

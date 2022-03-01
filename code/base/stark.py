@@ -1,39 +1,11 @@
-from pyspark import RDD, SparkContext
-from fri import *
-from rdd_ntt import rdd_fast_coset_divide, rdd_fast_coset_evaluate
-from rdd_poly import (
-    poly_append_zero,
-    poly_combine_list,
-    poly_mul_x,
-    poly_sub_list,
-    rdd_take_by_indexs,
-)
-from univariate import *
-from multivariate import *
-from ntt import *
+from base.fri import *
+from base.univariate import *
+from base.multivariate import *
 from functools import reduce
-from rdd.rdd_merkle import merkle_build, merkle_open, merkle_root
 import os
-from time import time
-from rdd_fri import RddFri
 
 
-def next_power_two(n):
-    if n & (n - 1) == 0:
-        return n
-    return 1 << len(bin(n)[2:])
-
-
-def rdd_from_poly(sc: SparkContext, poly: Polynomial) -> RDD:
-    arr = poly.coefficients
-    return sc.parallelize(list(enumerate(arr)))
-
-
-def poly_from_rdd(rdd: RDD) -> Polynomial:
-    return Polynomial(rdd.values().collect())
-
-
-class FastStark:
+class Stark:
     def __init__(
         self,
         field,
@@ -42,8 +14,7 @@ class FastStark:
         security_level,
         num_registers,
         num_cycles,
-        transition_constraints_degree=3,
-        sc: SparkContext = None,
+        transition_constraints_degree=2,
     ):
         assert (
             len(bin(field.p)) - 2 >= security_level
@@ -55,56 +26,34 @@ class FastStark:
         assert (
             num_colinearity_checks * 2 >= security_level
         ), "number of colinearity checks must be at least half of security level"
-        self.sc = sc
 
         self.field = field
         self.expansion_factor = expansion_factor
         self.num_colinearity_checks = num_colinearity_checks
         self.security_level = security_level
 
+        self.num_randomizers = 4 * num_colinearity_checks
+
         self.num_registers = num_registers
         self.original_trace_length = num_cycles
 
-        # self.num_randomizers = 4 * num_colinearity_checks
-        self.num_randomizers = (
-            next_power_two(self.original_trace_length) - self.original_trace_length
+        randomized_trace_length = self.original_trace_length + self.num_randomizers
+        omicron_domain_length = 1 << len(
+            bin(randomized_trace_length * transition_constraints_degree)[2:]
         )
-
-        self.randomized_trace_length = self.original_trace_length + self.num_randomizers
-        self.omicron_domain_length = 1 << len(
-            bin(self.randomized_trace_length * transition_constraints_degree)[2:]
-        )
-        self.fri_domain_length = self.omicron_domain_length * expansion_factor
+        fri_domain_length = omicron_domain_length * expansion_factor
 
         self.generator = self.field.generator()
-        self.omega = self.field.primitive_nth_root(self.fri_domain_length)
-        self.omicron = self.field.primitive_nth_root(self.omicron_domain_length)
-        self.omicron_domain = [
-            self.omicron ^ i for i in range(self.omicron_domain_length)
-        ]
+        self.omega = self.field.primitive_nth_root(fri_domain_length)
+        self.omicron = self.field.primitive_nth_root(omicron_domain_length)
+        self.omicron_domain = [self.omicron ^ i for i in range(omicron_domain_length)]
 
-        self.fri = RddFri(
+        self.fri = Fri(
             self.generator,
             self.omega,
-            self.fri_domain_length,
+            fri_domain_length,
             self.expansion_factor,
             self.num_colinearity_checks,
-        )
-
-    def preprocess(self):
-        transition_zerofier = fast_zerofier(
-            self.omicron_domain[: (self.original_trace_length - 1)],
-            self.omicron,
-            self.omicron_domain_length,
-        )
-        transition_zerofier_codeword = fast_coset_evaluate(
-            transition_zerofier, self.generator, self.omega, self.fri.domain_length
-        )
-        transition_zerofier_root = Merkle.commit(transition_zerofier_codeword)
-        return (
-            transition_zerofier,
-            transition_zerofier_codeword,
-            transition_zerofier_root,
         )
 
     def transition_degree_bounds(self, transition_constraints):
@@ -128,6 +77,10 @@ class FastStark:
     def max_degree(self, transition_constraints):
         md = max(self.transition_quotient_degree_bounds(transition_constraints))
         return (1 << (len(bin(md)[2:]))) - 1
+
+    def transition_zerofier(self):
+        domain = self.omicron_domain[0 : (self.original_trace_length - 1)]
+        return Polynomial.zerofier_domain(domain)
 
     def boundary_zerofiers(self, boundary):
         zerofiers = []
@@ -160,164 +113,70 @@ class FastStark:
             for i in range(0, number)
         ]
 
-    def prove(
-        self,
-        trace: list,  # list[RDD]
-        transition_constraints,
-        boundary,
-        transition_zerofier,
-        transition_zerofier_codeword,
-        proof_stream=None,
-    ):
+    def prove(self, trace, transition_constraints, boundary, proof_stream=None):
         # create proof stream object if necessary
         if proof_stream == None:
             proof_stream = ProofStream()
 
         # concatenate randomizers
-        for i in range(self.num_registers):
-            trace[i] = poly_append_zero(
-                trace[i], self.original_trace_length, self.num_randomizers
-            )
-
-        trace_length = self.randomized_trace_length
-        assert trace[0].count() == trace_length
-
-        print(
-            "trace_length",
-            trace_length,
-            "omicron_domain_length",
-            self.omicron_domain_length,
-            "fri_domain_length",
-            self.fri_domain_length,
-        )
-
-        prove_start_time = time()
+        for k in range(self.num_randomizers):
+            trace = trace + [
+                [self.field.sample(os.urandom(17)) for s in range(self.num_registers)]
+            ]
 
         # interpolate
-        print("interpolate trace_polynomials")
-        start = time()
-        trace_domain = [self.omicron ^ i for i in range(trace_length)]
+        trace_domain = [self.omicron ^ i for i in range(len(trace))]
         trace_polynomials = []
         for s in range(self.num_registers):
-            single_trace = trace[s].values().collect()
+            single_trace = [trace[c][s] for c in range(len(trace))]
             trace_polynomials = trace_polynomials + [
-                # TODO: replace with ntt
-                fast_interpolate(
-                    trace_domain, single_trace, self.omicron, self.omicron_domain_length
-                )
+                Polynomial.interpolate_domain(trace_domain, single_trace)
             ]
-
-        trace_polynomials = [
-            rdd_from_poly(self.sc, trace_polynomials[i])
-            for i in range(self.num_registers)
-        ]
-        print("finished", time() - start)
-
-        # print("interpolate trace finished")
 
         # subtract boundary interpolants and divide out boundary zerofiers
-        print("subtract boundary interpolants and divide out boundary zerofiers")
-        start = time()
-        boundary_interpolants = self.boundary_interpolants(boundary)
-        boundary_zerofiers = self.boundary_zerofiers(boundary)
         boundary_quotients = []
         for s in range(self.num_registers):
-            interpolant = boundary_interpolants[s]
-            zerofier = rdd_from_poly(self.sc, boundary_zerofiers[s])
-            quotient = rdd_fast_coset_divide(
-                poly_sub_list(trace_polynomials[s], interpolant.coefficients),
-                zerofier,
-                self.generator,
-                self.omicron,
-                self.omicron_domain_length,
-            )
+            interpolant = self.boundary_interpolants(boundary)[s]
+            zerofier = self.boundary_zerofiers(boundary)[s]
+            quotient = (trace_polynomials[s] - interpolant) / zerofier
             boundary_quotients += [quotient]
-        print("finished", time() - start)
 
         # commit to boundary quotients
-        print("commit to boundary quotients")
-        start = time()
+        fri_domain = self.fri.eval_domain()
         boundary_quotient_codewords = []
-        boundary_quotient_trees = []
+        boundary_quotient_Merkle_roots = []
         for s in range(self.num_registers):
             boundary_quotient_codewords = boundary_quotient_codewords + [
-                rdd_fast_coset_evaluate(
-                    boundary_quotients[s],
-                    self.generator,
-                    self.omega,
-                    self.fri_domain_length,
-                )
+                boundary_quotients[s].evaluate_domain(fri_domain)
             ]
-            tree = merkle_build(boundary_quotient_codewords[s], self.fri_domain_length)
-            boundary_quotient_trees += [tree]
-            tree_root = merkle_root(tree)
-            proof_stream.push(tree_root)
-        print("finished", time() - start)
+            merkle_root = Merkle.commit(boundary_quotient_codewords[s])
+            proof_stream.push(merkle_root)
 
         # symbolically evaluate transition constraints
-        # TODO
-        print("symbolically evaluate transition constraints")
-        start = time()
         point = (
             [Polynomial([self.field.zero(), self.field.one()])]
-            + [poly_from_rdd(t) for t in trace_polynomials]
-            + [poly_from_rdd(tp).scale(self.omicron) for tp in trace_polynomials]
+            + trace_polynomials
+            + [tp.scale(self.omicron) for tp in trace_polynomials]
         )
         transition_polynomials = [
             a.evaluate_symbolic(point) for a in transition_constraints
         ]
-        print("finished", time() - start)
-
-        # print("transition_polynomials generated")
 
         # divide out zerofier
-        # transition_quotients = [
-        #     fast_coset_divide(
-        #         tp,
-        #         transition_zerofier,
-        #         self.generator,
-        #         self.omicron,
-        #         self.omicron_domain_length,
-        #     )
-        #     for tp in transition_polynomials
-        # ]
-        print("transition_polynomials divide out zerofier")
-        start = time()
         transition_quotients = [
-            rdd_fast_coset_divide(
-                rdd_from_poly(self.sc, tp),
-                rdd_from_poly(self.sc, transition_zerofier),
-                self.generator,
-                self.omicron,
-                self.omicron_domain_length,
-            )
-            for tp in transition_polynomials
+            tp / self.transition_zerofier() for tp in transition_polynomials
         ]
-        print("finished", time() - start)
 
         # commit to randomizer polynomial
-        print("commit to randomizer polynomial")
-        start = time()
         randomizer_polynomial = Polynomial(
             [
                 self.field.sample(os.urandom(17))
-                for i in range(self.omicron_domain_length)
+                for i in range(self.max_degree(transition_constraints) + 1)
             ]
         )
-        randomizer_polynomial = rdd_from_poly(self.sc, randomizer_polynomial)
-        # randomizer_codeword = fast_coset_evaluate(
-        #     randomizer_polynomial, self.generator, self.omega, self.fri_domain_length
-        # )
-        randomizer_codeword = rdd_fast_coset_evaluate(
-            randomizer_polynomial,
-            self.generator,
-            self.omega,
-            self.fri_domain_length,
-        )
-        randomizer_tree = merkle_build(randomizer_codeword, self.fri_domain_length)
-        randomizer_root = merkle_root(randomizer_tree)
+        randomizer_codeword = randomizer_polynomial.evaluate_domain(fri_domain)
+        randomizer_root = Merkle.commit(randomizer_codeword)
         proof_stream.push(randomizer_root)
-        print("finished", time() - start)
 
         # get weights for nonlinear combination
         #  - 1 randomizer
@@ -328,16 +187,15 @@ class FastStark:
             proof_stream.prover_fiat_shamir(),
         )
 
-        # assert [
-        #     tq.degree() for tq in transition_quotients
-        # ] == self.transition_quotient_degree_bounds(
-        #     transition_constraints
-        # ), "transition quotient degrees do not match with expectation"
+        assert [
+            tq.degree() for tq in transition_quotients
+        ] == self.transition_quotient_degree_bounds(
+            transition_constraints
+        ), "transition quotient degrees do not match with expectation"
 
         # compute terms of nonlinear combination polynomial
-        print("compute terms of nonlinear combination polynomial")
-        start = time()
-        max_degree = self.omicron_domain_length - 1
+        x = Polynomial([self.field.zero(), self.field.one()])
+        max_degree = self.max_degree(transition_constraints)
         terms = []
         terms += [randomizer_polynomial]
         for i in range(len(transition_quotients)):
@@ -346,43 +204,28 @@ class FastStark:
                 max_degree
                 - self.transition_quotient_degree_bounds(transition_constraints)[i]
             )
-            # 多项式的最大阶都变为 max_degree
-            # terms += [(x ^ shift) * transition_quotients[i]]
-            terms += [poly_mul_x(transition_quotients[i], shift)]
+            terms += [(x ^ shift) * transition_quotients[i]]
         for i in range(self.num_registers):
             terms += [boundary_quotients[i]]
             shift = (
                 max_degree
-                - self.boundary_quotient_degree_bounds(trace_length, boundary)[i]
+                - self.boundary_quotient_degree_bounds(len(trace), boundary)[i]
             )
-            # 多项式的最大阶都变为 max_degree
-            # terms += [(x ^ shift) * boundary_quotients[i]]
-            terms += [poly_mul_x(boundary_quotients[i], shift)]
-        print("finished", time() - start)
+            terms += [(x ^ shift) * boundary_quotients[i]]
 
         # take weighted sum
         # combination = sum(weights[i] * terms[i] for all i)
-        print("compute combination polynomial")
-        start = time()
-        combination = poly_combine_list(terms, weights)
-        print("finished", time() - start)
+        combination = reduce(
+            lambda a, b: a + b,
+            [Polynomial([weights[i]]) * terms[i] for i in range(len(terms))],
+            Polynomial([]),
+        )
 
         # compute matching codeword
-        # combined_codeword = fast_coset_evaluate(
-        #     combination, self.generator, self.omega, self.fri_domain_length
-        # )
-        print("compute combined_codeword")
-        start = time()
-        combined_codeword = rdd_fast_coset_evaluate(
-            combination, self.generator, self.omega, self.fri_domain_length
-        )
-        print("finished", time() - start)
+        combined_codeword = combination.evaluate_domain(fri_domain)
 
         # prove low degree of combination polynomial, and collect indices
-        print("prove low degree of combination polynomial, and collect indices")
-        start = time()
         indices = self.fri.prove(combined_codeword, proof_stream)
-        print("finished", time() - start)
 
         # process indices
         duplicated_indices = [i for i in indices] + [
@@ -394,63 +237,23 @@ class FastStark:
         ]
         quadrupled_indices.sort()
 
-        # boundary_quotients = [poly_from_rdd(q) for q in boundary_quotients]
-        # trace_polynomials = [poly_from_rdd(t) for t in trace_polynomials]
-        # boundary_quotient_codewords = [
-        #     t.values().collect() for t in boundary_quotient_codewords
-        # ]
-        # transition_quotients = [poly_from_rdd(t) for t in transition_quotients]
-        # randomizer_codeword = randomizer_codeword.values().collect()
-        # terms = [poly_from_rdd(t) for t in terms]
-        # combination = poly_from_rdd(combination)
-        # combined_codeword = combined_codeword.values().collect()
-
         # open indicated positions in the boundary quotient codewords
-        # print(len(boundary_quotient_codewords))
-        print("open indicated positions in the boundary quotient codewords")
-        start = time()
-        for j in range(self.num_registers):
-            needed_codeword = rdd_take_by_indexs(
-                boundary_quotient_codewords[j], quadrupled_indices
-            )
+        for bqc in boundary_quotient_codewords:
             for i in quadrupled_indices:
-                proof_stream.push(needed_codeword[i])
-                path = merkle_open(i, boundary_quotient_trees[j])
+                proof_stream.push(bqc[i])
+                path = Merkle.open(i, bqc)
                 proof_stream.push(path)
-        print("finished", time() - start)
 
         # ... as well as in the randomizer
-        print("open indicated positions in the randomizer_codeword")
-        start = time()
-        needed_codeword = rdd_take_by_indexs(randomizer_codeword, quadrupled_indices)
         for i in quadrupled_indices:
-            proof_stream.push(needed_codeword[i])
-            path = merkle_open(i, randomizer_tree)
+            proof_stream.push(randomizer_codeword[i])
+            path = Merkle.open(i, randomizer_codeword)
             proof_stream.push(path)
-        print("finished", time() - start)
-
-        # ... and also in the zerofier!
-        print("open indicated positions in the transition_zerofier_codeword")
-        start = time()
-        for i in quadrupled_indices:
-            proof_stream.push(transition_zerofier_codeword[i])
-            path = Merkle.open(i, transition_zerofier_codeword)
-            proof_stream.push(path)
-        print("finished", time() - start)
-
-        print(time() - prove_start_time, "seconds")
 
         # the final proof is just the serialized stream
         return proof_stream.serialize()
 
-    def verify(
-        self,
-        proof,
-        transition_constraints,
-        boundary,
-        transition_zerofier_root,
-        proof_stream=None,
-    ):
+    def verify(self, proof, transition_constraints, boundary, proof_stream=None):
         H = sha256
 
         # infer trace length from boundary conditions
@@ -516,17 +319,6 @@ class FastStark:
             if not verifier_accepts:
                 return False
 
-        # read and verify transition zerofier leafs
-        transition_zerofier = dict()
-        for i in duplicated_indices:
-            transition_zerofier[i] = proof_stream.pull()
-            path = proof_stream.pull()
-            verifier_accepts = verifier_accepts and Merkle.verify(
-                transition_zerofier_root, i, path, transition_zerofier[i]
-            )
-            if not verifier_accepts:
-                return False
-
         # verify leafs of combination polynomial
         for i in range(len(indices)):
             current_index = indices[i]  # do need i
@@ -562,7 +354,9 @@ class FastStark:
             terms += [randomizer[current_index]]
             for s in range(len(transition_constraints_values)):
                 tcv = transition_constraints_values[s]
-                quotient = tcv / transition_zerofier[current_index]
+                quotient = tcv / self.transition_zerofier().evaluate(
+                    domain_current_index
+                )
                 terms += [quotient]
                 shift = (
                     self.max_degree(transition_constraints)

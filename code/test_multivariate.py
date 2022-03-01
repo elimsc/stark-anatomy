@@ -1,4 +1,4 @@
-from multivariate import *
+from base.multivariate import *
 
 
 def test_evaluate():
@@ -48,7 +48,7 @@ def test_lift():
     five = FieldElement(5, field)
 
     upoly = Polynomial.interpolate_domain([zero, one, two], [two, five, five])
-    mpoly = MPolynomial.from_univariate(upoly, 3)
+    mpoly = MPolynomial.lift(upoly, 3)
 
     assert upoly.evaluate(five) == mpoly.evaluate(
         [zero, zero, zero, five]
@@ -80,4 +80,6 @@ def test_evaluate_symbolic():
     assert poly1 == Polynomial([one, zero, zero, zero, zero, zero, one, three])
 
 
+test_evaluate()
+test_lift()
 test_evaluate_symbolic()

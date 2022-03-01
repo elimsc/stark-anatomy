@@ -1,18 +1,21 @@
 from time import time
-from algebra import *
-from univariate import *
-from multivariate import *
+
+from pyspark import SparkConf, SparkContext
+from base.algebra import *
+from base.univariate import *
+from base.multivariate import *
 from rescue_prime import *
-from fri import *
-from ip import *
-from fast_stark import *
+from base.fri import *
+from base.ip import *
+from base.fast_stark import *
 import sys
 
-from rdd_fast_stark import FastStark as RddFastStark
+from rdd.rdd_fast_stark import FastStark as RddFastStark
 
-from test_spark import get_sc
 
-# sc = get_sc("test_fast_stark")
+# conf = SparkConf().set("spark.driver.memory", "8g").set("spark.executor.memory", "4g")
+
+# sc = SparkContext(conf=conf)
 
 
 def test_fast_stark():
@@ -99,7 +102,7 @@ def test_fast_stark_time():
     num_colinearity_checks = 2
     security_level = 2
 
-    rp = RescuePrime(4000)
+    rp = RescuePrime(40)
     output_element = field.sample(bytes(b"0xdeadbeef"))
 
     for trial in range(0, 1):  # 20
@@ -142,7 +145,7 @@ def test_fast_stark_time():
         proof = stark.prove(
             trace,
             round_constants1,
-            rp.transition_constaints_f,
+            rp.trasition_constaints_evaluate,
             boundary,
             transition_zerofier,
             transition_zerofier_codeword,
@@ -164,7 +167,7 @@ def test_fast_stark_time():
             proof,
             air,
             round_constants1,
-            rp.transition_constaints_f,
+            rp.trasition_constaints_evaluate,
             boundary,
             transition_zerofier_root,
         )

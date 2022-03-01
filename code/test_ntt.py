@@ -1,32 +1,21 @@
-from numpy import product
-from algebra import *
-from rdd_poly import poly_degree
-from univariate import *
-from ntt import *
+from pyspark import SparkConf, SparkContext
+from base.algebra import *
+from rdd.rdd_poly import poly_degree
+from base.univariate import *
+from base.ntt import *
 import os
-from rdd_ntt import (
+from rdd.rdd_poly import (
     ntt1,
     rdd_fast_coset_divide,
     rdd_fast_coset_evaluate,
     rdd_fast_multiply,
+    rdd_fast_zerofier,
     rdd_intt,
     rdd_ntt,
 )
 
-from pyspark import SparkContext, SparkConf
-
-
-conf = (
-    SparkConf().setAppName("test_fast_stark").setMaster("spark://zhdeMacBook-Pro:7077")
-)
+conf = SparkConf().set("spark.driver.memory", "8g").set("spark.executor.memory", "4g")
 sc = SparkContext(conf=conf)
-
-sc.addPyFile("./algebra.py")
-sc.addPyFile("./rdd_ntt.py")
-sc.addPyFile("./rdd_poly.py")
-sc.addPyFile("./univariate.py")
-
-f = Field.main()
 
 
 def test_ntt():
@@ -190,10 +179,26 @@ def test_coset_evaluate():
     assert values_fast == values_rdd.values().collect()
 
 
+def test_fast_zerofier():
+    field = Field.main()
+
+    logn = 9
+    n = 1 << logn
+    n1 = 1 << (logn - 2)
+    primitive_root = field.primitive_nth_root(n)
+    domain = [primitive_root ^ i for i in range(n1)]
+    zerofier1 = fast_zerofier(domain, primitive_root, n)
+
+    rdd_domain = sc.parallelize(list(enumerate(domain)))
+    # zerofier2 = rdd_fast_zerofier(rdd_domain, primitive_root, n)
+    assert zerofier1.coefficients == zerofier2.values().collect()
+
+
 # test_ntt()
 # test_intt()
-test_coset_evaluate()
+# test_coset_evaluate()
 # test_divide()
-# test_multiply()
+test_multiply()
+# test_fast_zerofier()
 
 sc.stop()

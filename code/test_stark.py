@@ -1,9 +1,9 @@
-from algebra import *
-from univariate import *
-from multivariate import *
+from base.algebra import *
+from base.univariate import *
+from base.multivariate import *
 from rescue_prime import *
-from fri import *
-from ip import *
+from base.fri import *
+from base.ip import *
 from stark import *
 
 

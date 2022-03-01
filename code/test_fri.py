@@ -1,8 +1,9 @@
-from algebra import *
-from fri import *
+from pyspark import SparkConf, SparkContext
+from base.algebra import *
+from base.fri import *
 from time import time
 
-from rdd_fri import RddFri
+from rdd.rdd_fri import RddFri
 
 
 def test_fri():
@@ -72,27 +73,26 @@ def test_fri():
     print("success! \\o/")
 
     # disturb then test for failure
-    # print("testing invalid codeword ...")
-    # proof_stream = ProofStream()
-    # for i in range(0, degree // 3):
-    #     codeword[i] = field.zero()
+    print("testing invalid codeword ...")
+    proof_stream = ProofStream()
+    for i in range(0, degree // 3):
+        codeword[i] = field.zero()
 
-    # fri.prove(codeword, proof_stream)
-    # points = []
-    # assert False == fri.verify(
-    #     proof_stream, points
-    # ), "proof should fail, but is accepted ..."
-    # print("success! \\o/")
+    fri.prove(codeword, proof_stream)
+    points = []
+    assert False == fri.verify(
+        proof_stream, points
+    ), "proof should fail, but is accepted ..."
+    print("success! \\o/")
 
 
-from test_spark import get_sc
-
-sc = get_sc("test_rdd_fri")
+conf = SparkConf().set("spark.driver.memory", "8g").set("spark.executor.memory", "4g")
+sc = SparkContext(conf=conf)
 
 
 def test_rdd_fri():
     field = Field.main()
-    degree = 2**10 - 1
+    degree = 2**8 - 1
     expansion_factor = 4
     num_colinearity_tests = 17
 

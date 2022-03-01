@@ -1,8 +1,23 @@
 from rescue_prime import *
-from fast_stark import *
+from rdd_fast_stark import *
 from hashlib import blake2s
 import os
 import pickle as pickle
+
+from rdd_fast_stark import FastStark as RddFastStark
+
+from pyspark import SparkContext, SparkConf
+
+conf = (
+    SparkConf().setAppName("test_fast_stark").setMaster("spark://zhdeMacBook-Pro:7077")
+)
+sc = SparkContext(conf=conf)
+
+sc.addPyFile("./algebra.py")
+sc.addPyFile("./rdd_ntt.py")
+sc.addPyFile("./univariate.py")
+sc.addPyFile("./rdd_merkle.py")
+sc.addPyFile("./rdd_poly.py")
 
 
 class SignatureProofStream(ProofStream):
@@ -36,7 +51,7 @@ class FastRPSSS:
         num_cycles = self.rp.N + 1
         state_width = self.rp.m
 
-        self.stark = FastStark(
+        self.stark = RddFastStark(
             self.field,
             expansion_factor,
             num_colinearity_checks,
@@ -44,6 +59,7 @@ class FastRPSSS:
             state_width,
             num_cycles,
             transition_constraints_degree=3,
+            sc=sc,
         )
         (
             self.transition_zerofier,

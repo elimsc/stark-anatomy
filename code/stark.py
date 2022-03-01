@@ -109,7 +109,7 @@ class Stark:
 
     def sample_weights(self, number, randomness):
         return [
-            self.field.sample(blake2b(randomness + bytes(i)).digest())
+            self.field.sample(sha256(randomness + bytes(i)).digest())
             for i in range(0, number)
         ]
 
@@ -254,7 +254,7 @@ class Stark:
         return proof_stream.serialize()
 
     def verify(self, proof, transition_constraints, boundary, proof_stream=None):
-        H = blake2b
+        H = sha256
 
         # infer trace length from boundary conditions
         original_trace_length = 1 + max(c for c, r, v in boundary)

@@ -1,10 +1,11 @@
-from algebra import FieldElement
-from rdd_poly import *
-from rdd_fast_stark import FastStark as RddFastStark
+from pyspark import SparkConf
+from base.algebra import FieldElement
+from rdd.rdd_poly import *
+from rdd.rdd_fast_stark import FastStark as RddFastStark
 
-from test_spark import get_sc
 
-sc = get_sc("test_poly")
+conf = SparkConf().set("spark.driver.memory", "8g").set("spark.executor.memory", "4g")
+sc = SparkContext(conf=conf)
 
 f = Field.main()
 
@@ -68,12 +69,12 @@ def test_rdd_take_by_indexs():
     )
 
 
-# test_poly_sub_list()
-# test_poly_append_zero()
-# test_poly_degree()
-# test_poly_scale()
-# test_poly_mul_x()
-# test_poly_combine()
+test_poly_sub_list()
+test_poly_append_zero()
+test_poly_degree()
+test_poly_scale()
+test_poly_mul_x()
+test_poly_combine()
 test_rdd_take_by_indexs()
 
 sc.stop()

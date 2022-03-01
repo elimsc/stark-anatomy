@@ -1,4 +1,4 @@
-from algebra import Field
+from base.algebra import Field
 
 
 def test_field():
