@@ -1,4 +1,4 @@
-from pyspark import RDD
+from pyspark import RDD, StorageLevel
 from base.algebra import *
 from base.merkle import *
 from base.ip import *
@@ -117,20 +117,24 @@ class RddFri:
             # split and fold
             halfN = N // 2
             codeword = (
-                codeword.map(lambda x: (x[0] % halfN, x[1]))
-                .groupByKey(sc.defaultParallelism * 2)
-                .mapValues(list)
-                .map(
-                    lambda x: (
-                        x[0],
-                        two.inverse()
-                        * (
-                            (one + alpha / (offset * (omega ^ x[0]))) * x[1][0]
-                            + (one - alpha / (offset * (omega ^ x[0]))) * x[1][1]
-                        ),
+                (
+                    codeword.map(lambda x: (x[0] % halfN, x[1]))
+                    .groupByKey(sc.defaultParallelism * 2)
+                    .mapValues(list)
+                    .map(
+                        lambda x: (
+                            x[0],
+                            two.inverse()
+                            * (
+                                (one + alpha / (offset * (omega ^ x[0]))) * x[1][0]
+                                + (one - alpha / (offset * (omega ^ x[0]))) * x[1][1]
+                            ),
+                        )
                     )
                 )
-            ).sortByKey()
+                .sortByKey()
+                .persist(StorageLevel.MEMORY_AND_DISK)
+            )
             # codeword = [
             #     two.inverse()
             #     * (

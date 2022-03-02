@@ -113,7 +113,7 @@ class FastStark:
         transition_zerofier = rdd_from_poly(self.sc, transition_zerofier)
         transition_zerofier_codeword = rdd_fast_coset_evaluate(
             transition_zerofier, self.generator, self.omega, self.fri.domain_length
-        )
+        ).persist(StorageLevel.DISK_ONLY)
         transition_zerofier_tree = merkle_build(
             transition_zerofier_codeword, self.fri_domain_length
         )
@@ -240,7 +240,7 @@ class FastStark:
                     self.omicron_domain_length,
                     FieldElement(self.omicron_domain_length, self.field).inverse(),
                     single_trace,
-                )
+                ).persist(StorageLevel.MEMORY_AND_DISK)
             ]
         print("finished", time() - start)
 
@@ -261,7 +261,7 @@ class FastStark:
                 self.generator,
                 self.omicron,
                 self.omicron_domain_length,
-            )
+            ).persist(StorageLevel.MEMORY_AND_DISK)
             boundary_quotients += [quotient]
         print("finished", time() - start)
 
@@ -277,7 +277,7 @@ class FastStark:
                     self.generator,
                     self.omega,
                     self.fri_domain_length,
-                )
+                ).persist(StorageLevel.DISK_ONLY)
             ]
             tree = merkle_build(boundary_quotient_codewords[s], self.fri_domain_length)
             boundary_quotient_trees += [tree]
@@ -289,7 +289,10 @@ class FastStark:
         print("get transition_polynomials from transition constraints")
         start = time()
         cur_state_polys = trace_polynomials
-        next_state_polys = [poly_scale(tp, self.omicron) for tp in trace_polynomials]
+        next_state_polys = [
+            poly_scale(tp, self.omicron).persist(StorageLevel.MEMORY_AND_DISK)
+            for tp in trace_polynomials
+        ]
         # transition_polynomials = get_transition_polynomials(
         #     [poly_from_rdd(rdd) for rdd in cur_state_polys],
         #     [poly_from_rdd(rdd) for rdd in next_state_polys],
@@ -298,9 +301,10 @@ class FastStark:
             cur_state_polys,
             next_state_polys,
         )
-        # transition_polynomials = [
-        #     rdd_from_poly(self.sc, poly) for poly in transition_polynomials
-        # ]
+
+        transition_polynomials = [
+            rdd.persist(StorageLevel.MEMORY_AND_DISK) for rdd in transition_polynomials
+        ]
         print("finished", time() - start)
 
         # print("transition_polynomials generated")
@@ -325,7 +329,7 @@ class FastStark:
                 self.generator,
                 self.ce_root,
                 self.ce_domain_length,
-            )
+            ).persist(StorageLevel.MEMORY_AND_DISK)
             for tp in transition_polynomials
         ]
         print("finished", time() - start)
@@ -338,7 +342,7 @@ class FastStark:
                 (i, self.field.sample(os.urandom(17)))
                 for i in range(self.ce_domain_length)
             ]
-        )
+        ).persist(StorageLevel.MEMORY_AND_DISK)
         # randomizer_codeword = fast_coset_evaluate(
         #     randomizer_polynomial, self.generator, self.omega, self.fri_domain_length
         # )
@@ -347,7 +351,7 @@ class FastStark:
             self.generator,
             self.omega,
             self.fri_domain_length,
-        )
+        ).persist(StorageLevel.DISK_ONLY)
         randomizer_tree = merkle_build(randomizer_codeword, self.fri_domain_length)
         randomizer_root = merkle_root(randomizer_tree)
         proof_stream.push(randomizer_root)
@@ -381,7 +385,11 @@ class FastStark:
             shift = max_degree - self.transition_quotients_degree[i]
             # 多项式的最大阶都变为 max_degree
             # terms += [(x ^ shift) * transition_quotients[i]]
-            terms += [poly_mul_x(transition_quotients[i], shift)]
+            terms += [
+                poly_mul_x(transition_quotients[i], shift).persist(
+                    StorageLevel.MEMORY_AND_DISK
+                )
+            ]
         self.boundary_quotients_degree = []
         for i in range(self.num_registers):
             terms += [boundary_quotients[i]]
@@ -389,14 +397,20 @@ class FastStark:
             shift = max_degree - self.boundary_quotients_degree[i]
             # 多项式的最大阶都变为 max_degree
             # terms += [(x ^ shift) * boundary_quotients[i]]
-            terms += [poly_mul_x(boundary_quotients[i], shift)]
+            terms += [
+                poly_mul_x(boundary_quotients[i], shift).persist(
+                    StorageLevel.MEMORY_AND_DISK
+                )
+            ]
         print("finished", time() - start)
 
         # take weighted sum
         # combination = sum(weights[i] * terms[i] for all i)
         print("compute combination polynomial")
         start = time()
-        combination = poly_combine_list(terms, weights)
+        combination = poly_combine_list(terms, weights).persist(
+            StorageLevel.MEMORY_AND_DISK
+        )
         print("finished", time() - start)
 
         # compute matching codeword
@@ -407,7 +421,7 @@ class FastStark:
         start = time()
         combined_codeword = rdd_fast_coset_evaluate(
             combination, self.generator, self.omega, self.fri_domain_length
-        )
+        ).persist(StorageLevel.DISK_ONLY)
         print("finished", time() - start)
 
         # prove low degree of combination polynomial, and collect indices

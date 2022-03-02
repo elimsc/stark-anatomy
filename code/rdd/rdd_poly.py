@@ -76,7 +76,6 @@ def rdd_ntt(
     return (
         values.map(lambda x: (x[0] % r, (x[0] // r, x[1])))
         .groupByKey(sc.defaultParallelism * 2)  # r
-        .persist(StorageLevel.MEMORY_AND_DISK)
         .mapValues(list)
         .flatMap(
             lambda x: [
@@ -91,7 +90,6 @@ def rdd_ntt(
             lambda x: (x[1][0], (x[0], x[1][1] * (primitive_root ^ (x[0] * x[1][0]))))
         )
         .groupByKey(sc.defaultParallelism * 2)  # n // r
-        .persist(StorageLevel.MEMORY_AND_DISK)
         .mapValues(list)
         .flatMap(
             lambda x: [
@@ -103,7 +101,6 @@ def rdd_ntt(
         )
         .map(lambda x: ((x[0] % r) * (n // r) + x[0] // r, x[1]))
         .sortByKey()
-        .persist(StorageLevel.MEMORY_AND_DISK)
     )
 
 
@@ -114,9 +111,7 @@ def rdd_intt(
     values: RDD,
 ) -> RDD:
     transformed_values = rdd_ntt(primitive_root.inverse(), root_order, values)
-    return transformed_values.map(lambda x: (x[0], x[1] * ninv)).persist(
-        StorageLevel.MEMORY_AND_DISK
-    )
+    return transformed_values.map(lambda x: (x[0], x[1] * ninv))
 
 
 def rdd_fast_coset_evaluate(polynomial: RDD, offset, generator, order):
@@ -127,7 +122,7 @@ def rdd_fast_coset_evaluate(polynomial: RDD, offset, generator, order):
         order,
         poly_append_zero(scaled_polynomial, cur_len, order - cur_len),
     )
-    return values.persist(StorageLevel.MEMORY_AND_DISK)
+    return values
 
 
 # lhs, rhs为RDD，输出为RDD, [] * []
@@ -178,9 +173,7 @@ def rdd_fast_multiply(lhs: RDD, rhs: RDD, primitive_root, root_order) -> RDD:
     )
     product_coefficients = rdd_intt(root, order, ninv, hadamard_product)
 
-    return product_coefficients.filter(lambda x: x[0] <= degree).persist(
-        StorageLevel.MEMORY_AND_DISK
-    )
+    return product_coefficients.filter(lambda x: x[0] <= degree)
 
 
 # lhs, rhs 为RDD，输出为RDD
@@ -235,18 +228,14 @@ def rdd_fast_coset_divide(
         lambda x: x[0] <= (lhs_degree - rhs_degree)
     )
 
-    return poly_scale(scaled_quotient, offset.inverse()).persist(
-        StorageLevel.MEMORY_AND_DISK
-    )
+    return poly_scale(scaled_quotient, offset.inverse())
 
 
 # --------------- poly ops -----------------------------
 
 
 def poly_scale(poly: RDD, factor) -> RDD:  # poly: RDD[(index,v)]
-    return poly.map(lambda x: (x[0], (factor ^ x[0]) * x[1])).persist(
-        StorageLevel.MEMORY_AND_DISK
-    )
+    return poly.map(lambda x: (x[0], (factor ^ x[0]) * x[1]))
 
 
 def poly_degree(poly: RDD) -> int:
@@ -265,7 +254,7 @@ def poly_mul_x(poly: RDD, n) -> RDD:
     sc = poly.context
     poly = poly.map(lambda x: (x[0] + n, x[1]))
     poly = sc.parallelize([i, zero] for i in range(n)).union(poly)
-    return poly.persist(StorageLevel.MEMORY_AND_DISK)
+    return poly
 
 
 # a * poly1 + b * poly2
@@ -283,7 +272,7 @@ def poly_combine_list(polys: list, vs: list) -> RDD:
     poly = poly_combine(polys[0], polys[1], vs[0], vs[1])
     for i in range(2, len(vs)):
         poly = poly_combine(poly, polys[i], one, vs[i])
-    return poly.persist(StorageLevel.MEMORY_AND_DISK)
+    return poly
 
 
 def poly_sub_list(lhs: RDD, rhs: list) -> RDD:
@@ -294,13 +283,11 @@ def poly_sub_list(lhs: RDD, rhs: list) -> RDD:
             return (x[0], x[1] - rhs[x[0]])
         return x
 
-    return lhs.map(lambda x: sub(x, rhs)).persist(StorageLevel.MEMORY_AND_DISK)
+    return lhs.map(lambda x: sub(x, rhs))
 
 
 def poly_mul_constant(lhs: RDD, constant) -> RDD:
-    return lhs.map(lambda x: (x[0], x[1] * constant)).persist(
-        StorageLevel.MEMORY_AND_DISK
-    )
+    return lhs.map(lambda x: (x[0], x[1] * constant))
 
 
 def poly_exp(rdd: RDD, exponent, primitive_root, root_order) -> RDD:
@@ -313,7 +300,7 @@ def poly_exp(rdd: RDD, exponent, primitive_root, root_order) -> RDD:
         acc = rdd_fast_multiply(acc, acc, primitive_root, root_order)
         if (1 << i) & exponent != 0:
             acc = rdd_fast_multiply(acc, rdd, primitive_root, root_order)
-    return acc.persist(StorageLevel.MEMORY_AND_DISK)
+    return acc
 
 
 def poly_add(lhs: RDD, rhs: RDD) -> RDD:
@@ -330,7 +317,6 @@ def poly_add(lhs: RDD, rhs: RDD) -> RDD:
         .groupByKey(sc.defaultParallelism * 2)
         .mapValues(list)
         .map(lambda x: (x[0], sum_arr(x[1])))
-        .persist(StorageLevel.MEMORY_AND_DISK)
     )
 
 
@@ -348,7 +334,6 @@ def poly_sub(lhs: RDD, rhs: RDD) -> RDD:
         .groupByKey(sc.defaultParallelism * 2)
         .mapValues(list)
         .map(lambda x: (x[0], sub_arr(x[1])))
-        .persist(StorageLevel.MEMORY_AND_DISK)
     )
 
 
