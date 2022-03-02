@@ -5,3 +5,4 @@ __pycache__/
 *.csv
 spark1/
 **.DS_Store
+todo.md

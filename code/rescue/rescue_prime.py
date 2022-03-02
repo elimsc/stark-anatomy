@@ -4,7 +4,7 @@ from pyspark import RDD
 from base.algebra import *
 from base.univariate import *
 from base.multivariate import *
-from base.ntt import intt
+from base.ntt import fast_exp, fast_multiply, intt
 from rdd.rdd_poly import poly_add, poly_exp, poly_mul_constant, poly_sub
 
 
@@ -337,6 +337,37 @@ class RescuePrime:
 
             # equate left and right hand sides
             air += [poly_sub(lhs, rhs)]
+        return air
+
+    def poly_trasition_constaints(
+        self,
+        prev_state,
+        next_state,
+        round_constants,
+        primitive_root,
+        root_order,
+    ):
+        zero = self.field.zero()
+        first_step_constants = round_constants[0]
+        second_step_constants = round_constants[1]
+        air = []
+        for i in range(self.m):
+            lhs = Polynomial([zero])
+            for k in range(self.m):
+                temp = fast_exp(prev_state[k], self.alpha, primitive_root, root_order)
+                temp = Polynomial([c * self.MDS[i][k] for c in temp.coefficients])
+                lhs = lhs + temp
+            lhs = lhs + first_step_constants[i]
+
+            rhs = Polynomial([zero])
+            for k in range(self.m):
+                temp = next_state[k] - second_step_constants[k]
+                rhs += Polynomial([c * self.MDSinv[i][k] for c in temp.coefficients])
+
+            rhs = fast_exp(rhs, self.alpha, primitive_root, root_order)
+
+            air += [lhs - rhs]
+
         return air
 
     def trasition_constaints(

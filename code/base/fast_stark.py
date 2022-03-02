@@ -7,6 +7,8 @@ from functools import reduce
 import os
 from time import time
 
+from rescue.rescue_prime import RescuePrime
+
 
 def next_power_two(n):
     if n & (n - 1) == 0:
@@ -160,9 +162,17 @@ class FastStark:
         transition_zerofier_codeword,
         proof_stream=None,
     ):
+        # def get_transition_polynomials(cur_state, next_state):
+        #     return transition_constraints(
+        #         cur_state, next_state, round_constants_polys, lambda x: Polynomial([x])
+        #     )
         def get_transition_polynomials(cur_state, next_state):
             return transition_constraints(
-                cur_state, next_state, round_constants_polys, lambda x: Polynomial([x])
+                cur_state,
+                next_state,
+                round_constants_polys,
+                self.ce_root,
+                self.ce_domain_length,
             )
 
         # create proof stream object if necessary
@@ -417,7 +427,7 @@ class FastStark:
         transition_zerofier_root,
         proof_stream=None,
     ):
-        def eval_transition_constraints(point, cur_state, next_state):
+        def eval_transition_constraints(cur_index, point, cur_state, next_state):
             round_constants_vals = []
             for poly_list in round_constants_polys:
                 round_constants_vals += [[poly.evaluate(point) for poly in poly_list]]
@@ -530,7 +540,7 @@ class FastStark:
             #     for s in range(len(transition_constraints))
             # ]
             transition_constraints_values = eval_transition_constraints(
-                domain_current_index, current_trace, next_trace
+                current_index, domain_current_index, current_trace, next_trace
             )
 
             # compute nonlinear combination

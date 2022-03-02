@@ -75,7 +75,7 @@ def rdd_ntt(
 
     return (
         values.map(lambda x: (x[0] % r, (x[0] // r, x[1])))
-        .groupByKey(sc.defaultParallelism * 2)  # r
+        .groupByKey()  # r
         .mapValues(list)
         .flatMap(
             lambda x: [
@@ -89,7 +89,7 @@ def rdd_ntt(
             # k: x[0], i: x[1][0], v: x[1][1]
             lambda x: (x[1][0], (x[0], x[1][1] * (primitive_root ^ (x[0] * x[1][0]))))
         )
-        .groupByKey(sc.defaultParallelism * 2)  # n // r
+        .groupByKey()  # n // r
         .mapValues(list)
         .flatMap(
             lambda x: [
@@ -313,10 +313,7 @@ def poly_add(lhs: RDD, rhs: RDD) -> RDD:
 
     sc = lhs.context
     return (
-        lhs.union(rhs)
-        .groupByKey(sc.defaultParallelism * 2)
-        .mapValues(list)
-        .map(lambda x: (x[0], sum_arr(x[1])))
+        lhs.union(rhs).groupByKey().mapValues(list).map(lambda x: (x[0], sum_arr(x[1])))
     )
 
 
@@ -330,10 +327,7 @@ def poly_sub(lhs: RDD, rhs: RDD) -> RDD:
 
     sc = lhs.context
     return (
-        lhs.union(rhs)
-        .groupByKey(sc.defaultParallelism * 2)
-        .mapValues(list)
-        .map(lambda x: (x[0], sub_arr(x[1])))
+        lhs.union(rhs).groupByKey().mapValues(list).map(lambda x: (x[0], sub_arr(x[1])))
     )
 
 

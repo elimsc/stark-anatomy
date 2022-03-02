@@ -119,7 +119,7 @@ class RddFri:
             codeword = (
                 (
                     codeword.map(lambda x: (x[0] % halfN, x[1]))
-                    .groupByKey(sc.defaultParallelism * 2)
+                    .groupByKey()
                     .mapValues(list)
                     .map(
                         lambda x: (

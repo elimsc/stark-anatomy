@@ -4,7 +4,7 @@ from pyspark import SparkConf, SparkContext
 from base.algebra import *
 from base.univariate import *
 from base.multivariate import *
-from rescue_prime import *
+from rescue.rescue_prime import *
 from base.fri import *
 from base.ip import *
 from base.fast_stark import *
@@ -13,7 +13,12 @@ import sys
 from rdd.rdd_fast_stark import FastStark as RddFastStark
 
 
-conf = SparkConf().set("spark.driver.memory", "8g").set("spark.executor.memory", "4g")
+conf = (
+    SparkConf()
+    .set("spark.driver.memory", "4g")
+    .set("spark.executor.memory", "4g")
+    .set("spark.default.parallelism", "16")
+)
 
 
 def test_fast_stark():
@@ -94,13 +99,13 @@ def test_fast_stark():
         print("proof rejected! \\o/")
 
 
-def test_fast_stark_time():
+def test_fast_stark_time(n):
     field = Field.main()
     expansion_factor = 4
     num_colinearity_checks = 2
     security_level = 2
 
-    rp = RescuePrime(40)
+    rp = RescuePrime(n)
     output_element = field.sample(bytes(b"0xdeadbeef"))
 
     for trial in range(0, 1):  # 20
@@ -143,7 +148,7 @@ def test_fast_stark_time():
         proof = stark.prove(
             trace,
             round_constants,
-            rp.trasition_constaints,
+            rp.poly_trasition_constaints,
             boundary,
             transition_zerofier,
             transition_zerofier_codeword,
@@ -166,14 +171,15 @@ def test_fast_stark_time():
         print("success \\o/")
 
 
-def test_rdd_fast_stark():
+def test_rdd_fast_stark(n):
     field = Field.main()
     expansion_factor = 4
     num_colinearity_checks = 2
     security_level = 2
     sc = SparkContext(conf=conf)
+    sc.setLogLevel("WARN")
 
-    rp = RescuePrime(40)
+    rp = RescuePrime(n)
     output_element = field.sample(bytes(b"0xdeadbeef"))
 
     for trial in range(0, 1):  # 20
@@ -192,6 +198,7 @@ def test_rdd_fast_stark():
             num_cycles,
             sc=sc,
         )
+
         (
             transition_zerofier,
             transition_zerofier_codeword,
@@ -234,20 +241,29 @@ def test_rdd_fast_stark():
 
         sc.stop()
 
-        print("stark verify--------------------")
-        start = time()
-        verdict = stark.verify(
-            proof,
-            round_constants,
-            rp.trasition_constaints,
-            boundary,
-            transition_zerofier_root,
-        )
-        print("finished", time() - start)
-        assert verdict == True, "valid stark proof fails to verify"
-        print("success \\o/")
+        # print("stark verify--------------------")
+        # start = time()
+        # verdict = stark.verify(
+        #     proof,
+        #     round_constants,
+        #     rp.trasition_constaints,
+        #     boundary,
+        #     transition_zerofier_root,
+        # )
+        # print("finished", time() - start)
+        # assert verdict == True, "valid stark proof fails to verify"
+        # print("success \\o/")
 
 
-# test_fast_stark()
-# test_fast_stark_time()
-test_rdd_fast_stark()
+if __name__ == "__main__":
+    # test_fast_stark()
+    mode = int(sys.argv[1])
+    n = int(sys.argv[2]) if len(sys.argv) > 2 else 40
+    print(n)
+    if mode == 0:
+        test_fast_stark_time(n)  # 15s
+    elif mode == 1:
+        test_rdd_fast_stark(n)
+    else:
+        test_rdd_fast_stark(n)
+        test_fast_stark_time(n)

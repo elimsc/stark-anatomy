@@ -69,14 +69,15 @@ def merkle_build(data_array: RDD, n) -> RDD:
     logn = int(math.log2(n))
     # r = data_array.getNumPartitions()  # r个分区
     r = sc.defaultParallelism
-    r = next_power_two(r)
-    if 4 * r < n:
-        r = 2 * r
+    # r = next_power_two(r)
+    # if 4 * r < n:
+    #     r = 2 * r
+    # r = 2 ** (logn // 2)
     partition_size = n // r
 
     subtree = (
         data_array.map(lambda x: (x[0] // partition_size, (x[0] + n, x[1])))
-        .groupByKey(r)
+        .groupByKey()  # r
         .persist(StorageLevel.MEMORY_AND_DISK)
         .mapValues(list)
         .map(lambda x: (x[0], _merkle_build0(x[1])))
@@ -108,7 +109,7 @@ def merkle_build(data_array: RDD, n) -> RDD:
         sc.parallelize([(0, 0)] + top_tree)
         .union(subtree)
         .sortByKey()
-        .persist(StorageLevel.DISK_ONLY)
+        .persist(StorageLevel.MEMORY_AND_DISK)
     )
 
 
