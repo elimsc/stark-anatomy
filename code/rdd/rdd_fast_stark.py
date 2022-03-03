@@ -89,9 +89,6 @@ class FastStark:
         self.generator = self.field.generator()
         self.omega = self.field.primitive_nth_root(self.fri_domain_length)
         self.omicron = self.field.primitive_nth_root(self.omicron_domain_length)
-        self.omicron_domain = [
-            self.omicron ^ i for i in range(self.omicron_domain_length)
-        ]
 
         self.expansion_factor = self.ce_expansion_factor * self.lde_expansion_factor
 
@@ -104,11 +101,16 @@ class FastStark:
         )
 
     def preprocess(self):
-        # TODO: 这里是否需要实现个 rdd_fast_zerofier
         print("compute transition_zerofier")
         start = time()
         transition_zerofier1 = fast_zerofier(
-            self.omicron_domain[self.original_trace_length - 1 :],
+            [
+                self.omicron ^ i
+                for i in range(
+                    self.original_trace_length - 1, self.omicron_domain_length
+                )
+            ],
+            # self.omicron_domain[self.original_trace_length - 1 :],
             self.omicron,
             self.omicron_domain_length,
         )
@@ -160,16 +162,6 @@ class FastStark:
             for a in transition_constraints
         ]
 
-    def transition_quotient_degree_bounds(self, transition_constraints):
-        return [
-            d - (self.original_trace_length - 1)
-            for d in self.transition_degree_bounds(transition_constraints)
-        ]
-
-    def max_degree(self, transition_constraints):
-        md = max(self.transition_quotient_degree_bounds(transition_constraints))
-        return (1 << (len(bin(md)[2:]))) - 1
-
     def boundary_zerofiers(self, boundary):
         zerofiers = []
         for s in range(self.num_registers):
@@ -187,13 +179,6 @@ class FastStark:
                 Polynomial.interpolate_domain(domain, values)
             ]
         return interpolants
-
-    def boundary_quotient_degree_bounds(self, randomized_trace_length, boundary):
-        randomized_trace_degree = randomized_trace_length - 1
-        return [
-            randomized_trace_degree - bz.degree()
-            for bz in self.boundary_zerofiers(boundary)
-        ]
 
     def sample_weights(self, number, randomness):
         return [
@@ -325,10 +310,6 @@ class FastStark:
             poly_scale(tp, self.omicron).persist(StorageLevel.MEMORY_AND_DISK)
             for tp in trace_polynomials
         ]
-        # transition_polynomials = get_transition_polynomials(
-        #     [poly_from_rdd(rdd) for rdd in cur_state_polys],
-        #     [poly_from_rdd(rdd) for rdd in next_state_polys],
-        # )
         transition_polynomials = get_transition_polynomials(
             cur_state_polys,
             next_state_polys,
@@ -342,19 +323,6 @@ class FastStark:
             time() - start,
         )
 
-        # print("transition_polynomials generated")
-
-        # divide out zerofier
-        # transition_quotients = [
-        #     fast_coset_divide(
-        #         tp,
-        #         transition_zerofier,
-        #         self.generator,
-        #         self.omicron,
-        #         self.omicron_domain_length,
-        #     )
-        #     for tp in transition_polynomials
-        # ]
         print("transition_polynomials divide out zerofier")
         start = time()
         transition_quotients = [
@@ -378,9 +346,6 @@ class FastStark:
                 for i in range(self.ce_domain_length)
             ]
         ).persist(StorageLevel.MEMORY_AND_DISK)
-        # randomizer_codeword = fast_coset_evaluate(
-        #     randomizer_polynomial, self.generator, self.omega, self.fri_domain_length
-        # )
         randomizer_codeword = rdd_fast_coset_evaluate(
             randomizer_polynomial,
             self.generator,
@@ -451,9 +416,6 @@ class FastStark:
         print("compute combination polynomial finished", time() - start)
 
         # compute matching codeword
-        # combined_codeword = fast_coset_evaluate(
-        #     combination, self.generator, self.omega, self.fri_domain_length
-        # )
         print("compute combined_codeword")
         start = time()
         combined_codeword = rdd_fast_coset_evaluate(
@@ -479,17 +441,6 @@ class FastStark:
             for i in duplicated_indices
         ]
         quadrupled_indices.sort()
-
-        # boundary_quotients = [poly_from_rdd(q) for q in boundary_quotients]
-        # trace_polynomials = [poly_from_rdd(t) for t in trace_polynomials]
-        # boundary_quotient_codewords = [
-        #     t.values().collect() for t in boundary_quotient_codewords
-        # ]
-        # transition_quotients = [poly_from_rdd(t) for t in transition_quotients]
-        # randomizer_codeword = randomizer_codeword.values().collect()
-        # terms = [poly_from_rdd(t) for t in terms]
-        # combination = poly_from_rdd(combination)
-        # combined_codeword = combined_codeword.values().collect()
 
         # open indicated positions in the boundary quotient codewords
         # print(len(boundary_quotient_codewords))
@@ -659,11 +610,7 @@ class FastStark:
                 ) + interpolant.evaluate(domain_next_index)
 
             point = [domain_current_index] + current_trace + next_trace
-            # transition_constraints 在对应 (X, current_trace, next_trace) 处的值
-            # transition_constraints_values1 = [
-            #     transition_constraints[s].evaluate(point)
-            #     for s in range(len(transition_constraints))
-            # ]
+
             transition_constraints_values = eval_transition_constraints(
                 domain_current_index, current_trace, next_trace
             )
@@ -692,13 +639,6 @@ class FastStark:
                 [terms[j] * weights[j] for j in range(len(terms))],
                 self.field.zero(),
             )
-            # print(current_index, next_index, domain_current_index)
-            # print("transition_constraints_values", transition_constraints_values)
-            # print("cur_state", point[1 : 1 + self.num_registers])
-            # print("next_state", point[1 + self.num_registers :])
-            # print("terms", terms)
-            # print(values)
-            # print(combination)
 
             # verify against combination polynomial value
             # 验证 自己求出来的组合多项式的值 和 fri第一层的merkle树上的值 是否相等
