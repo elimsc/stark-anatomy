@@ -17,6 +17,7 @@ conf = (
     SparkConf()
     .set("spark.driver.memory", "4g")
     .set("spark.executor.memory", "4g")
+    .set("spark.rpc.message.maxSize", "1024")
     .set("spark.default.parallelism", "16")
 )
 
@@ -111,7 +112,7 @@ def test_fast_stark_time(n):
     for trial in range(0, 1):  # 20
         input_element = output_element
         print("running trial with input:", input_element.value)
-        output_element = rp.hash(input_element)
+        # output_element = rp.hash(input_element)
         num_cycles = rp.N + 1
         state_width = rp.m
 
@@ -123,18 +124,13 @@ def test_fast_stark_time(n):
             state_width,
             num_cycles,
         )
-        (
-            transition_zerofier,
-            transition_zerofier_codeword,
-            transition_zerofier_root,
-        ) = stark.preprocess()
 
         # prove honestly
         print("honest proof generation ...")
 
         # prove
         trace = rp.trace(input_element)
-        boundary = rp.boundary_constraints(output_element)
+        boundary = rp.boundary_constraints(trace[-1][0])
 
         print("compute round_constants_polynomials")
         start = time()
@@ -150,8 +146,6 @@ def test_fast_stark_time(n):
             round_constants,
             rp.poly_trasition_constaints,
             boundary,
-            transition_zerofier,
-            transition_zerofier_codeword,
         )
         print("prove time:", time() - start)
 
@@ -164,7 +158,6 @@ def test_fast_stark_time(n):
             round_constants,
             rp.trasition_constaints,
             boundary,
-            transition_zerofier_root,
         )
         print("finished", time() - start)
         assert verdict == True, "valid stark proof fails to verify"
@@ -185,7 +178,7 @@ def test_rdd_fast_stark(n):
     for trial in range(0, 1):  # 20
         input_element = output_element
         print("running trial with input:", input_element.value)
-        output_element = rp.hash(input_element)
+        # output_element = rp.hash(input_element)
         num_cycles = rp.N + 1
         state_width = rp.m
 
@@ -199,13 +192,6 @@ def test_rdd_fast_stark(n):
             sc=sc,
         )
 
-        (
-            transition_zerofier,
-            transition_zerofier_codeword,
-            transition_zerofier_tree,
-            transition_zerofier_root,
-        ) = stark.preprocess()
-
         # prove honestly
         print("honest proof generation ...")
 
@@ -216,8 +202,8 @@ def test_rdd_fast_stark(n):
             trace1 += [sc.parallelize([(j, trace[j][i]) for j in range(len(trace))])]
         assert len(trace1) == stark.num_registers, "len(trace1) == stark.num_registers"
         assert trace1[0].take(1)[0][0] == 0
+        boundary = rp.boundary_constraints(trace[-1][0])
         trace = trace1
-        boundary = rp.boundary_constraints(output_element)
 
         print("compute round_constants_polynomials")
         start = time()
@@ -233,26 +219,22 @@ def test_rdd_fast_stark(n):
             round_constants,
             rp.rdd_transition_constaints,
             boundary,
-            transition_zerofier,
-            transition_zerofier_codeword,
-            transition_zerofier_tree,
         )
         print("prove time:", time() - start)
 
         sc.stop()
 
-        # print("stark verify--------------------")
-        # start = time()
-        # verdict = stark.verify(
-        #     proof,
-        #     round_constants,
-        #     rp.trasition_constaints,
-        #     boundary,
-        #     transition_zerofier_root,
-        # )
-        # print("finished", time() - start)
-        # assert verdict == True, "valid stark proof fails to verify"
-        # print("success \\o/")
+        print("stark verify--------------------")
+        start = time()
+        verdict = stark.verify(
+            proof,
+            round_constants,
+            rp.trasition_constaints,
+            boundary,
+        )
+        print("finished", time() - start)
+        assert verdict == True, "valid stark proof fails to verify"
+        print("success \\o/")
 
 
 if __name__ == "__main__":
