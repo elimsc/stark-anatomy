@@ -4,6 +4,7 @@ from base.univariate import *
 from base.multivariate import *
 from base.ntt import *
 from functools import reduce
+from rdd.rdd_merkle import Merkle as Merkle1, merkle_root
 import os
 from time import time
 
@@ -89,10 +90,12 @@ class FastStark:
         transition_zerofier_codeword = fast_coset_evaluate(
             transition_zerofier, self.generator, self.omega, self.fri.domain_length
         )
-        transition_zerofier_root = Merkle.commit(transition_zerofier_codeword)
+        transition_zerofier_tree = Merkle1(transition_zerofier_codeword)
+        transition_zerofier_root = transition_zerofier_tree.root()
         return (
             transition_zerofier,
             transition_zerofier_codeword,
+            transition_zerofier_tree,
             transition_zerofier_root,
         )
 
@@ -160,6 +163,7 @@ class FastStark:
         boundary,
         transition_zerofier,
         transition_zerofier_codeword,
+        transition_zerofier_tree,
         proof_stream=None,
     ):
         # def get_transition_polynomials(cur_state, next_state):
@@ -213,7 +217,7 @@ class FastStark:
             trace_polynomials = trace_polynomials + [
                 Polynomial(intt(self.omicron, single_trace))
             ]
-        print("finished", time() - start)
+        print("interpolate trace_polynomials finished", time() - start)
 
         # subtract boundary interpolants and divide out boundary zerofiers
         print("subtract boundary interpolants and divide out boundary zerofiers")
@@ -234,12 +238,16 @@ class FastStark:
             # quotient1 = (trace_polynomials[s] - interpolant) / zerofier
             # assert quotient == quotient1
             boundary_quotients += [quotient]
-        print("finished", time() - start)
+        print(
+            "subtract boundary interpolants and divide out boundary zerofiers finished",
+            time() - start,
+        )
 
         # commit to boundary quotients
         print("commit to boundary quotients")
         start = time()
         boundary_quotient_codewords = []
+        boundary_quotient_trees = []
         for s in range(self.num_registers):
             boundary_quotient_codewords = boundary_quotient_codewords + [
                 fast_coset_evaluate(
@@ -249,9 +257,11 @@ class FastStark:
                     self.fri_domain_length,
                 )
             ]
-            merkle_root = Merkle.commit(boundary_quotient_codewords[s])
-            proof_stream.push(merkle_root)
-        print("finished", time() - start)
+            # merkle_root = Merkle.commit(boundary_quotient_codewords[s])
+            boundary_quotient_trees += [Merkle1(boundary_quotient_codewords[s])]
+            boundary_quotient_root = boundary_quotient_trees[s].root()
+            proof_stream.push(boundary_quotient_root)
+        print("commit to boundary quotients finished", time() - start)
 
         # symbolically evaluate transition constraints
         print("get transition_polynomials from transition constraints")
@@ -268,7 +278,10 @@ class FastStark:
             trace_polynomials, [tp.scale(self.omicron) for tp in trace_polynomials]
         )
 
-        print("finished", time() - start)
+        print(
+            "get transition_polynomials from transition constraints finished",
+            time() - start,
+        )
 
         # divide out zerofier
         print("transition_polynomials divide out zerofier")
@@ -287,7 +300,7 @@ class FastStark:
         #     tp / transition_zerofier for tp in transition_polynomials
         # ]
         # assert transition_quotients == transition_quotients1
-        print("finished", time() - start)
+        print("transition_polynomials divide out zerofier finished", time() - start)
 
         # commit to randomizer polynomial
         print("commit to randomizer polynomial")
@@ -298,9 +311,11 @@ class FastStark:
         randomizer_codeword = fast_coset_evaluate(
             randomizer_polynomial, self.generator, self.omega, self.fri_domain_length
         )
-        randomizer_root = Merkle.commit(randomizer_codeword)
+        randomizer_tree = Merkle1(randomizer_codeword)
+        # randomizer_root = Merkle.commit(randomizer_codeword)
+        randomizer_root = randomizer_tree.root()
         proof_stream.push(randomizer_root)
-        print("finished", time() - start)
+        print("commit to randomizer polynomial finished", time() - start)
 
         # print("transition_quotients committed")
 
@@ -348,7 +363,7 @@ class FastStark:
             [Polynomial([weights[i]]) * terms[i] for i in range(len(terms))],
             Polynomial([]),
         )
-        print("finished", time() - start)
+        print("compute combination polynomial finished", time() - start)
 
         # compute matching codeword
         print("compute combined_codeword")
@@ -356,13 +371,16 @@ class FastStark:
         combined_codeword = fast_coset_evaluate(
             combination, self.generator, self.omega, self.fri_domain_length
         )
-        print("finished", time() - start)
+        print("compute combined_codeword finished", time() - start)
 
         # prove low degree of combination polynomial, and collect indices
         print("prove low degree of combination polynomial, and collect indices")
         start = time()
         indices = self.fri.prove(combined_codeword, proof_stream)
-        print("finished", time() - start)
+        print(
+            "prove low degree of combination polynomial, and collect indices finished",
+            time() - start,
+        )
 
         # process indices
         duplicated_indices = [i for i in indices] + [
@@ -378,30 +396,41 @@ class FastStark:
         # open indicated positions in the boundary quotient codewords
         print("open indicated positions in the boundary quotient codewords")
         start = time()
-        for bqc in boundary_quotient_codewords:
+        for s in range(len(boundary_quotient_codewords)):
             for i in quadrupled_indices:
+                bqc = boundary_quotient_codewords[s]
                 proof_stream.push(bqc[i])
-                path = Merkle.open(i, bqc)
+                # path = Merkle.open(i, bqc)
+                path = boundary_quotient_trees[s].open(i)
                 proof_stream.push(path)
-        print("finished", time() - start)
+        print(
+            "open indicated positions in the boundary quotient codewords finished",
+            time() - start,
+        )
 
         # ... as well as in the randomizer
         print("open indicated positions in the randomizer_codeword")
         start = time()
         for i in quadrupled_indices:
             proof_stream.push(randomizer_codeword[i])
-            path = Merkle.open(i, randomizer_codeword)
+            path = randomizer_tree.open(i)
             proof_stream.push(path)
-        print("finished", time() - start)
+        print(
+            "open indicated positions in the randomizer_codeword finished",
+            time() - start,
+        )
 
         # ... and also in the zerofier!
         print("open indicated positions in the transition_zerofier_codeword")
         start = time()
         for i in quadrupled_indices:
             proof_stream.push(transition_zerofier_codeword[i])
-            path = Merkle.open(i, transition_zerofier_codeword)
+            path = transition_zerofier_tree.open(i)
             proof_stream.push(path)
-        print("finished", time() - start)
+        print(
+            "open indicated positions in the transition_zerofier_codeword finished",
+            time() - start,
+        )
 
         # indices = sorted(indices)
         # cur_index = indices[0]
