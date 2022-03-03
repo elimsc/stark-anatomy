@@ -105,19 +105,42 @@ class FastStark:
 
     def preprocess(self):
         # TODO: 这里是否需要实现个 rdd_fast_zerofier
-        transition_zerofier = fast_zerofier(
-            self.omicron_domain[: (self.original_trace_length - 1)],
+        print("compute transition_zerofier")
+        start = time()
+        transition_zerofier1 = fast_zerofier(
+            self.omicron_domain[self.original_trace_length - 1 :],
             self.omicron,
             self.omicron_domain_length,
         )
-        transition_zerofier = rdd_from_poly(self.sc, transition_zerofier)
+        zero = self.field.zero()
+        one = self.field.one()
+        transition_zerofier = rdd_fast_coset_divide(
+            rdd_from_poly(
+                self.sc,
+                Polynomial([-one] + [zero] * (self.omicron_domain_length - 1) + [one]),
+            ),
+            rdd_from_poly(self.sc, transition_zerofier1),
+            self.omega,
+            self.ce_root,
+            self.ce_domain_length,
+        )
+        print(time() - start)
+
+        print("compute transition_zerofier_codeword")
+        start = time()
         transition_zerofier_codeword = rdd_fast_coset_evaluate(
             transition_zerofier, self.generator, self.omega, self.fri.domain_length
         ).persist(StorageLevel.DISK_ONLY)
+        print(time() - start)
+
+        print("compute transition_zerofier_tree")
+        start = time()
         transition_zerofier_tree = merkle_build(
             transition_zerofier_codeword, self.fri_domain_length
         )
         transition_zerofier_root = merkle_root(transition_zerofier_tree)
+        print(time() - start)
+
         return (
             transition_zerofier,
             transition_zerofier_codeword,
@@ -184,9 +207,6 @@ class FastStark:
         round_constants_polys,
         transition_constraints,
         boundary,
-        transition_zerofier,
-        transition_zerofier_codeword,
-        transition_zerofier_tree,
         proof_stream=None,
     ):
         rdd_round_constants_polys = []
@@ -227,6 +247,15 @@ class FastStark:
         )
 
         prove_start_time = time()
+
+        (
+            transition_zerofier,
+            transition_zerofier_codeword,
+            transition_zerofier_tree,
+            transition_zerofier_root,
+        ) = self.preprocess()
+
+        proof_stream.push(transition_zerofier_root)
 
         # interpolate
         print("interpolate trace_polynomials")
@@ -520,7 +549,6 @@ class FastStark:
         round_constants_polys,
         transition_constaints,
         boundary,
-        transition_zerofier_root,
         proof_stream=None,
     ):
         def eval_transition_constraints(point, cur_state, next_state):
@@ -539,6 +567,7 @@ class FastStark:
         if proof_stream == None:
             proof_stream = ProofStream()
         proof_stream = proof_stream.deserialize(proof)
+        transition_zerofier_root = proof_stream.pull()
 
         # get Merkle roots of boundary quotient codewords
         boundary_quotient_roots = []
