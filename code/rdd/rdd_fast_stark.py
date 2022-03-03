@@ -242,7 +242,7 @@ class FastStark:
                     single_trace,
                 ).persist(StorageLevel.MEMORY_AND_DISK)
             ]
-        print("finished", time() - start)
+        print("interpolate trace_polynomials finished", time() - start)
 
         # print("interpolate trace finished")
 
@@ -263,7 +263,10 @@ class FastStark:
                 self.omicron_domain_length,
             ).persist(StorageLevel.MEMORY_AND_DISK)
             boundary_quotients += [quotient]
-        print("finished", time() - start)
+        print(
+            "subtract boundary interpolants and divide out boundary zerofiers finished",
+            time() - start,
+        )
 
         # commit to boundary quotients
         print("commit to boundary quotients")
@@ -283,7 +286,7 @@ class FastStark:
             boundary_quotient_trees += [tree]
             tree_root = merkle_root(tree)
             proof_stream.push(tree_root)
-        print("finished", time() - start)
+        print("commit to boundary quotients finished", time() - start)
 
         # symbolically evaluate transition constraints
         print("get transition_polynomials from transition constraints")
@@ -305,7 +308,10 @@ class FastStark:
         transition_polynomials = [
             rdd.persist(StorageLevel.MEMORY_AND_DISK) for rdd in transition_polynomials
         ]
-        print("finished", time() - start)
+        print(
+            "get transition_polynomials from transition constraints finished",
+            time() - start,
+        )
 
         # print("transition_polynomials generated")
 
@@ -332,7 +338,7 @@ class FastStark:
             ).persist(StorageLevel.MEMORY_AND_DISK)
             for tp in transition_polynomials
         ]
-        print("finished", time() - start)
+        print("transition_polynomials divide out zerofier finished", time() - start)
 
         # commit to randomizer polynomial
         print("commit to randomizer polynomial")
@@ -355,7 +361,7 @@ class FastStark:
         randomizer_tree = merkle_build(randomizer_codeword, self.fri_domain_length)
         randomizer_root = merkle_root(randomizer_tree)
         proof_stream.push(randomizer_root)
-        print("finished", time() - start)
+        print("commit to randomizer polynomial finished", time() - start)
 
         # get weights for nonlinear combination
         #  - 1 randomizer
@@ -402,7 +408,9 @@ class FastStark:
                     StorageLevel.MEMORY_AND_DISK
                 )
             ]
-        print("finished", time() - start)
+        print(
+            "compute terms of nonlinear combination polynomial finished", time() - start
+        )
 
         # take weighted sum
         # combination = sum(weights[i] * terms[i] for all i)
@@ -411,7 +419,7 @@ class FastStark:
         combination = poly_combine_list(terms, weights).persist(
             StorageLevel.MEMORY_AND_DISK
         )
-        print("finished", time() - start)
+        print("compute combination polynomial finished", time() - start)
 
         # compute matching codeword
         # combined_codeword = fast_coset_evaluate(
@@ -422,13 +430,16 @@ class FastStark:
         combined_codeword = rdd_fast_coset_evaluate(
             combination, self.generator, self.omega, self.fri_domain_length
         ).persist(StorageLevel.DISK_ONLY)
-        print("finished", time() - start)
+        print("compute combined_codeword finished", time() - start)
 
         # prove low degree of combination polynomial, and collect indices
         print("prove low degree of combination polynomial, and collect indices")
         start = time()
         indices = self.fri.prove(combined_codeword, proof_stream)
-        print("finished", time() - start)
+        print(
+            "prove low degree of combination polynomial, and collect indices finished",
+            time() - start,
+        )
 
         # process indices
         duplicated_indices = [i for i in indices] + [
@@ -465,7 +476,10 @@ class FastStark:
                     i, boundary_quotient_trees[j], self.fri_domain_length * 2
                 )
                 proof_stream.push(path)
-        print("finished", time() - start)
+        print(
+            "open indicated positions in the boundary quotient codewords finished",
+            time() - start,
+        )
 
         # ... as well as in the randomizer
         print("open indicated positions in the randomizer_codeword")
@@ -475,7 +489,10 @@ class FastStark:
             proof_stream.push(needed_codeword[i])
             path = merkle_open(i, randomizer_tree, self.fri_domain_length * 2)
             proof_stream.push(path)
-        print("finished", time() - start)
+        print(
+            "open indicated positions in the randomizer_codeword finished",
+            time() - start,
+        )
 
         # ... and also in the zerofier!
         print("open indicated positions in the transition_zerofier_codeword")
@@ -487,7 +504,10 @@ class FastStark:
             proof_stream.push(needed_codeword[i])
             path = merkle_open(i, transition_zerofier_tree, self.fri_domain_length * 2)
             proof_stream.push(path)
-        print("finished", time() - start)
+        print(
+            "open indicated positions in the transition_zerofier_codeword finished",
+            time() - start,
+        )
 
         print(time() - prove_start_time, "seconds")
 

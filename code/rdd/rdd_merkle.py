@@ -86,6 +86,7 @@ def merkle_build(data_array: RDD, n) -> RDD:
     )
     # subtree = (
     #     data_array.map(lambda x: (x[0] + n, x[1]))
+    #     .coalesce(r)
     #     .glom()
     #     .map(lambda x: _merkle_build0(x))
     #     .flatMap(lambda x: x)

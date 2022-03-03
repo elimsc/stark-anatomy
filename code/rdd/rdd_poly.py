@@ -1,3 +1,4 @@
+from operator import mul
 from numpy import poly
 from pyspark import RDD, SparkContext, StorageLevel
 
@@ -168,8 +169,13 @@ def rdd_fast_multiply(lhs: RDD, rhs: RDD, primitive_root, root_order) -> RDD:
     lhs_codeword = rdd_ntt(root, order, lhs)
     rhs_codeword = rdd_ntt(root, order, rhs)
 
-    hadamard_product = lhs_codeword.zip(rhs_codeword).map(
-        lambda x: (x[0][0], x[0][1] * x[1][1])
+    # hadamard_product = lhs_codeword.zip(rhs_codeword).map(
+    #     lambda x: (x[0][0], x[0][1] * x[1][1])
+    # )
+    hadamard_product = (
+        lhs_codeword.union(rhs_codeword)
+        .reduceByKey(lambda a, b: a * b)
+        .persist(StorageLevel.MEMORY_AND_DISK)
     )
     product_coefficients = rdd_intt(root, order, ninv, hadamard_product)
 
@@ -218,9 +224,14 @@ def rdd_fast_coset_divide(
     lhs_codeword = rdd_ntt(root, order, scaled_lhs)
     rhs_codeword = rdd_ntt(root, order, scaled_rhs)
 
-    quotient_codeword = lhs_codeword.zip(rhs_codeword).map(
-        lambda x: (x[0][0], x[0][1] / x[1][1])
+    quotient_codeword = (
+        lhs_codeword.union(rhs_codeword)
+        .reduceByKey(lambda x, y: x / y)
+        .persist(StorageLevel.MEMORY_AND_DISK)
     )
+    # quotient_codeword = lhs_codeword.zip(rhs_codeword).map(
+    #     lambda x: (x[0][0], x[0][1] / x[1][1])
+    # )
 
     ninv = FieldElement(order, root.field).inverse()
     scaled_quotient = rdd_intt(root, order, ninv, quotient_codeword)
@@ -235,7 +246,9 @@ def rdd_fast_coset_divide(
 
 
 def poly_scale(poly: RDD, factor) -> RDD:  # poly: RDD[(index,v)]
-    return poly.map(lambda x: (x[0], (factor ^ x[0]) * x[1]))
+    return poly.map(lambda x: (x[0], (factor ^ x[0]) * x[1])).persist(
+        StorageLevel.MEMORY_AND_DISK
+    )
 
 
 def poly_degree(poly: RDD) -> int:
@@ -313,7 +326,9 @@ def poly_add(lhs: RDD, rhs: RDD) -> RDD:
 
     sc = lhs.context
     return (
-        lhs.union(rhs).groupByKey().mapValues(list).map(lambda x: (x[0], sum_arr(x[1])))
+        lhs.union(rhs)
+        .reduceByKey(lambda a, b: a + b)
+        .persist(StorageLevel.MEMORY_AND_DISK)
     )
 
 
@@ -325,9 +340,13 @@ def poly_sub(lhs: RDD, rhs: RDD) -> RDD:
             r -= l[i]
         return r
 
-    sc = lhs.context
+    # return (
+    #     lhs.union(rhs).groupByKey().mapValues(list).map(lambda x: (x[0], sub_arr(x[1])))
+    # )
     return (
-        lhs.union(rhs).groupByKey().mapValues(list).map(lambda x: (x[0], sub_arr(x[1])))
+        lhs.union(rhs)
+        .reduceByKey(lambda a, b: a - b)
+        .persist(StorageLevel.MEMORY_AND_DISK)
     )
 
 

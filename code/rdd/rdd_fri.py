@@ -10,6 +10,7 @@ from hashlib import sha256
 from base.univariate import *
 from base.util import *
 from rdd.rdd_merkle import merkle_build, merkle_open, merkle_root
+from time import time
 
 
 class RddFri:
@@ -209,7 +210,10 @@ class RddFri:
     def prove(self, codeword: RDD, proof_stream: ProofStream):
         # commit phase
         # print("fri commit phase")
+        print("------- fri commit phase")
+        start = time()
         codewords, merkle_trees = self.commit(codeword, proof_stream)
+        print("------- fri commit phase end", time() - start)
 
         # get indices
         top_level_indices = self.sample_indices(
@@ -221,7 +225,8 @@ class RddFri:
         indices = [index for index in top_level_indices]
 
         # query phase
-        # print("fri query phase")
+        print("------- fri query phase")
+        start = time()
         for i in range(len(codewords) - 1):
             cur_codeword_length = self.domain_length // (2**i)
             indices = [index % (cur_codeword_length // 2) for index in indices]  # fold
@@ -234,6 +239,7 @@ class RddFri:
                 indices,
                 proof_stream,
             )
+        print("------- fri query phase end", time() - start)
 
         return top_level_indices
 

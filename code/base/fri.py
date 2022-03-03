@@ -5,6 +5,7 @@ from base.ntt import *
 from binascii import hexlify, unhexlify
 import math
 from hashlib import sha256
+from time import time
 
 from base.univariate import *
 from base.util import *
@@ -176,8 +177,10 @@ class Fri:
         ), "initial codeword length does not match length of initial codeword"
 
         # commit phase
+        print("------- fri commit phase")
+        start = time()
         codewords, merkle_trees = self.commit(codeword, proof_stream)
-
+        print("------- fri commit phase end.", time() - start)
         assert len(codewords[1]) == self.domain_length // 2
 
         # get indices
@@ -190,6 +193,8 @@ class Fri:
         indices = [index for index in top_level_indices]
 
         # query phase
+        print("------- fri query phase")
+        start = time()
         for i in range(len(codewords) - 1):
             cur_codeword_length = self.domain_length // (2**i)
             indices = [index % (cur_codeword_length // 2) for index in indices]  # fold
@@ -202,6 +207,7 @@ class Fri:
                 indices,
                 proof_stream,
             )
+        print("------- fri query phase end.", time() - start)
 
         return top_level_indices
 
