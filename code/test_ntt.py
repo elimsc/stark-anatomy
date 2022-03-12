@@ -14,7 +14,7 @@ from rdd.rdd_poly import (
 )
 
 conf = SparkConf().set("spark.driver.memory", "8g").set("spark.executor.memory", "4g")
-sc = SparkContext(conf=conf)
+sc = SparkContext()
 
 
 def test_ntt():
@@ -178,10 +178,10 @@ def test_coset_evaluate():
     assert values_fast == values_rdd.values().collect()
 
 
-test_ntt()
-test_intt()
-test_coset_evaluate()
+# test_ntt()
+# test_intt()
+# test_coset_evaluate()
 test_divide()
-test_multiply()
+# test_multiply()
 
 sc.stop()

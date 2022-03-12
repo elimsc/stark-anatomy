@@ -6,7 +6,7 @@ from rdd.rdd_fast_stark import FastStark as RddFastStark
 
 
 conf = SparkConf().set("spark.driver.memory", "8g").set("spark.executor.memory", "4g")
-sc = SparkContext(conf=conf)
+sc = SparkContext()
 
 f = Field.main()
 
@@ -92,8 +92,8 @@ def test_poly_exp():
 # test_poly_degree()
 # test_poly_scale()
 # test_poly_mul_x()
-# test_poly_combine()
+test_poly_combine()
 # test_rdd_take_by_indexs()
-test_poly_exp()
+# test_poly_exp()
 
 sc.stop()

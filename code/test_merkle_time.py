@@ -20,14 +20,14 @@ conf = (
     .set("spark.driver.memory", "4g")
     .set("spark.executor.memory", "4g")
     .set("spark.rpc.message.maxSize", "1024")
-    .set("spark.default.parallelism", "8")
+    .set("spark.default.parallelism", "16")
 )
 
 
 def test_rdd_merkle(n):
     global data_arr
 
-    sc = SparkContext(conf=conf)
+    sc = SparkContext()
     sc.setLogLevel("WARN")
     rdd_arr = sc.parallelize(data_arr)
     print(rdd_arr.getNumPartitions())

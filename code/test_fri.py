@@ -87,7 +87,7 @@ def test_fri():
 
 
 conf = SparkConf().set("spark.driver.memory", "8g").set("spark.executor.memory", "4g")
-sc = SparkContext(conf=conf)
+sc = SparkContext()
 
 
 def test_rdd_fri():

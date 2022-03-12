@@ -11,7 +11,7 @@ from pyspark import SparkContext, SparkConf
 conf = (
     SparkConf().setAppName("test_fast_stark").setMaster("spark://zhdeMacBook-Pro:7077")
 )
-sc = SparkContext(conf=conf)
+sc = SparkContext()
 
 sc.addPyFile("./algebra.py")
 sc.addPyFile("./rdd_ntt.py")

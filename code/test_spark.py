@@ -5,7 +5,7 @@ def get_sc(app_name="test_spark"):
     master_url = "spark://zhdeMacBook-Pro.local:7077"
     master_url = "spark://spark:7077"
     conf = SparkConf().setAppName(app_name).setMaster(master_url)
-    sc = SparkContext(conf=conf)
+    sc = SparkContext()
 
     base_path = "/Users/zh/Desktop/stark-anatomy/code"
     base_path = "/opt/bitnami/spark/code"
