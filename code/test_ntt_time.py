@@ -23,7 +23,7 @@ from rdd.rdd_poly import (
 )
 import sys
 
-conf = SparkConf().set("spark.driver.memory", "8g").set("spark.executor.memory", "4g")
+from test_spark import get_sc
 
 
 field = Field.main()
@@ -45,12 +45,12 @@ def test_rdd_ntt():
     global arr
     global primitive_root
     global n
-    sc = SparkContext()
-    sc.setLogLevel("WARN")
+    sc = get_sc()
     rdd_arr = sc.parallelize(arr)
     print("test rdd ntt")
     start = time()
     values1 = rdd_ntt(primitive_root, n, rdd_arr)
+    values1.collect()
     print("finished. ", time() - start)
     sc.stop()
 
@@ -70,13 +70,13 @@ def test_rdd_intt():
     global arr
     global primitive_root
     global n
-    sc = SparkContext()
-    sc.setLogLevel("WARN")
+    sc = get_sc()
     rdd_arr = sc.parallelize(arr)
     print("test_rdd_intt")
     start = time()
     ninv = FieldElement(n, field)
     values1 = rdd_intt(primitive_root, n, ninv, rdd_arr)
+    values1.collect()
     print("finished. ", time() - start)
     sc.stop()
 
@@ -98,13 +98,13 @@ def test_rdd_fast_coset_evaluate():
     global primitive_root
     global n
 
-    sc = SparkContext()
-    sc.setLogLevel("WARN")
+    sc = get_sc()
 
     rdd_arr = sc.parallelize(arr)
     print("test_rdd_fast_coset_evaluate")
     start = time()
     values1 = rdd_fast_coset_evaluate(rdd_arr, g, primitive_root, n)
+    values1.collect()
     print("finished. ", time() - start)
     sc.stop()
 
@@ -127,13 +127,13 @@ def test_rdd_fast_multiply():
     global primitive_root
     global n
 
-    sc = SparkContext()
-    sc.setLogLevel("WARN")
+    sc = get_sc()
 
     rdd_arr = sc.parallelize(arr)
     print("test_rdd_fast_multiply")
     start = time()
     values1 = rdd_fast_multiply(rdd_arr, rdd_arr, primitive_root, n)
+    values1.collect()
     print("finished. ", time() - start)
     sc.stop()
 
@@ -156,13 +156,13 @@ def test_rdd_fast_coset_divide():
     global primitive_root
     global n
 
-    sc = SparkContext()
-    sc.setLogLevel("WARN")
+    sc = get_sc()
 
     rdd_arr = sc.parallelize(arr)
     print("test_rdd_fast_coset_divide")
     start = time()
     values1 = rdd_fast_coset_divide(rdd_arr, rdd_arr, g, primitive_root, n)
+    values1.collect()
     print("finished. ", time() - start)
     sc.stop()
 
@@ -185,28 +185,16 @@ def test_rdd_fast_exp():
     global primitive_root
     global n
 
-    sc = SparkContext()
-    sc.setLogLevel("WARN")
+    sc = get_sc()
 
     rdd_arr = sc.parallelize(arr)
     print("test_rdd_fast_exp")
     start = time()
     values1 = poly_exp(rdd_arr, 8, primitive_root, n)
+    values1.collect()
     print("finished. ", time() - start)
     sc.stop()
 
-
-# test_ntt()
-# test_rdd_ntt()
-
-# test_fast_coset_evaluate()
-# test_rdd_fast_coset_evaluate()
-
-# test_fast_multiply()
-# test_rdd_fast_multiply()
-
-# test_fast_coset_divide()
-# test_rdd_fast_coset_divide()
 
 if __name__ == "__main__":
     mode = int(sys.argv[1])
@@ -219,19 +207,19 @@ if __name__ == "__main__":
         # test_ntt()
         # test_intt()
         # test_fast_coset_evaluate()
-        test_fast_multiply()
-        # test_fast_coset_divide()
+        # test_fast_multiply()
+        test_fast_coset_divide()
         # test_fast_exp()
     elif mode == 1:
         # test_rdd_ntt()
         # test_rdd_intt()
         # test_rdd_fast_coset_evaluate()
-        test_rdd_fast_multiply()
-        # test_rdd_fast_coset_divide()
+        # test_rdd_fast_multiply()
+        test_rdd_fast_coset_divide()
         # test_rdd_fast_exp()
     else:
-        # test_ntt()
-        # test_rdd_ntt()
+        test_ntt()
+        test_rdd_ntt()
 
         # test_intt()
         # test_rdd_intt()
@@ -239,8 +227,8 @@ if __name__ == "__main__":
         # test_fast_coset_evaluate()
         # test_rdd_fast_coset_evaluate()
 
-        test_fast_multiply()
-        test_rdd_fast_multiply()
+        # test_fast_multiply()
+        # test_rdd_fast_multiply()
 
         # test_fast_coset_divide()
         # test_rdd_fast_coset_divide()

@@ -15,20 +15,13 @@ from base.univariate import Polynomial
 from rdd.rdd_poly import ntt1, rdd_ntt
 import sys
 
-conf = (
-    SparkConf()
-    .set("spark.driver.memory", "4g")
-    .set("spark.executor.memory", "4g")
-    .set("spark.rpc.message.maxSize", "1024")
-    .set("spark.default.parallelism", "16")
-)
+from test_spark import get_sc
 
 
 def test_rdd_merkle(n):
     global data_arr
 
-    sc = SparkContext()
-    sc.setLogLevel("WARN")
+    sc = get_sc()
     rdd_arr = sc.parallelize(data_arr)
     print(rdd_arr.getNumPartitions())
     print("rdd build tree")
@@ -51,12 +44,7 @@ if __name__ == "__main__":
     logn = int(sys.argv[2])
     n = 1 << logn
     print(n)
-    # with open("tree.txt", "w+") as f:
-    #     for i in range(n):
-    #         f.write("(" + str(i) + "," + str(urandom(int(urandom(1)[0]))) + ")\n")
-    # data_arr = (
-    #     sc.textFile("tree.txt").map(literal_eval).persist(StorageLevel.MEMORY_AND_DISK)
-    # )
+
     data_arr = [(i, urandom(int(urandom(1)[0]))) for i in range(n)]
 
     if mode == 0:

@@ -20,7 +20,7 @@ from rdd.rdd_poly import (
 )
 import sys
 
-conf = SparkConf().set("spark.driver.memory", "8g").set("spark.executor.memory", "4g")
+from test_spark import get_sc
 
 
 field = Field.main()
@@ -38,8 +38,7 @@ def test_poly_scale():  # 这个比较耗时
 
 
 def test_rdd_poly_scale():
-    sc = SparkContext()
-    sc.setLogLevel("WARN")
+    sc = get_sc()
 
     rdd_arr = sc.parallelize(arr)
     print("test_rdd_poly_scale")
@@ -61,8 +60,7 @@ def test_poly_add():
 
 
 def test_rdd_poly_add():
-    sc = SparkContext()
-    sc.setLogLevel("WARN")
+    sc = get_sc()
 
     rdd_arr = sc.parallelize(arr)
     rdd_arr1 = sc.parallelize(arr)
@@ -85,8 +83,7 @@ def test_poly_sub():
 
 
 def test_rdd_poly_sub():
-    sc = SparkContext()
-    sc.setLogLevel("WARN")
+    sc = get_sc()
 
     rdd_arr = sc.parallelize(arr)
     rdd_arr1 = sc.parallelize(arr1)
@@ -107,8 +104,7 @@ def test_poly_mul_constant():
 
 
 def test_rdd_poly_mul_constant():
-    sc = SparkContext()
-    sc.setLogLevel("WARN")
+    sc = get_sc()
 
     rdd_arr = sc.parallelize(arr)
     print("test_rdd_poly_mul_constant")
@@ -127,21 +123,21 @@ if __name__ == "__main__":
     arr = [(i, field.sample(urandom(17))) for i in range(n)]
     arr1 = [(i, field.sample(urandom(17))) for i in range(n)]
     if mode == 0:
-        # test_poly_scale()
+        test_poly_scale()
         # test_poly_add()
-        test_poly_sub()
+        # test_poly_sub()
         # test_poly_mul_constant()
     elif mode == 1:
-        # test_rdd_poly_scale()
+        test_rdd_poly_scale()
         # test_rdd_poly_add()
-        test_rdd_poly_sub()
+        # test_rdd_poly_sub()
         # test_rdd_poly_mul_constant()
     else:
-        # test_poly_scale()
-        # test_rdd_poly_scale()
+        test_poly_scale()
+        test_rdd_poly_scale()
 
-        test_poly_add()
-        test_rdd_poly_add()
+        # test_poly_add()
+        # test_rdd_poly_add()
 
         # test_poly_sub()
         # test_rdd_poly_sub()

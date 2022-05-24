@@ -1,5 +1,4 @@
 from operator import mul
-from numpy import poly
 from pyspark import RDD, SparkContext, StorageLevel
 
 from base.algebra import Field

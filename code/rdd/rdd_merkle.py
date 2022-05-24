@@ -66,7 +66,7 @@ def merkle_build(data_array: RDD, n) -> RDD:
 
     # n = data_array.count()
     assert n & (n - 1) == 0, "must power of two"
-    logn = int(math.log2(n))
+    # logn = int(math.log2(n))
     # r = data_array.getNumPartitions()  # r个分区
     r = sc.defaultParallelism
     # r = next_power_two(r)
